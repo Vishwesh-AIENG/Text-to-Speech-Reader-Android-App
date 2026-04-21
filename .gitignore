@@ -1,0 +1,45 @@
+# Android / Gradle
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Release keystores / signing configs — never commit
+*.jks
+*.keystore
+keystore.properties
+
+# NDK / CMake generated
+.externalNativeBuild/
+cmake-build-debug/
+cmake-build-release/
+
+# Lint
+lint/
+
+# Navigation editor
+app/src/main/res/navigation/
+
+# Generated files
+app/src/debug/
+app/src/release/
+
+# APKs / AABs
+*.apk
+*.aab
+*.ap_
+
+# ProGuard mapping (keep locally, don't commit)
+mapping.txt
+
+# Test results
+*.xml
+!app/src/main/res/**/*.xml
+
+# macOS
+.DS_Store

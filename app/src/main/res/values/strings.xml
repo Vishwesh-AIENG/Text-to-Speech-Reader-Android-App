@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TTS Reader</string>
+
+    <!-- Permissions -->
+    <string name="permission_camera_rationale">Camera access is required to scan and read text in real time.</string>
+    <string name="permission_denied">Camera permission denied. Grant it in Settings to use this app.</string>
+    <string name="permission_grant_camera">Grant Camera Access</string>
+    <string name="open_settings">Open Settings</string>
+
+    <!-- TTS controls -->
+    <string name="speak">Speak</string>
+    <string name="stop">Stop</string>
+    <string name="action_speak">Speak translated text</string>
+    <string name="action_stop">Stop speaking</string>
+
+    <!-- Language selector -->
+    <string name="label_source">Source</string>
+    <string name="label_target">Target</string>
+    <string name="translate">Translate</string>
+    <string name="select_language">Select Language</string>
+
+    <!-- Model download -->
+    <string name="downloading_model">Downloading translation model…</string>
+
+    <!-- Snackbar actions -->
+    <string name="action_retry">Retry</string>
+    <string name="action_dismiss">Dismiss</string>
+
+    <!-- Offline banner -->
+    <string name="offline_banner">No internet — model downloads unavailable</string>
+
+    <!-- Error messages (user-facing) -->
+    <string name="error_network">No internet connection. Connect to download translation models.</string>
+    <string name="error_model_download">Translation model download failed. Check your connection and try again.</string>
+    <string name="error_translation">Translation failed. Please try again.</string>
+    <string name="error_camera">Camera failed to start. Please restart the app.</string>
+    <string name="error_tts_init">Text-to-speech failed to initialise.</string>
+    <string name="error_tts_language">TTS does not support this language on your device.</string>
+    <string name="error_ocr">Text recognition error. Please try again.</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_languages">Languages</string>
+    <string name="settings_source_language">Source Language</string>
+    <string name="settings_target_language">Target Language</string>
+    <string name="settings_section_models">Downloaded Models</string>
+    <string name="settings_no_models">No translation models downloaded yet.</string>
+    <string name="settings_delete_model">Delete model</string>
+    <string name="settings_deleting_model">Deleting…</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_about_description">Assistive Text-to-Speech Reader.\nPoint your camera at text to hear it read aloud in your chosen language.</string>
+    <string name="content_description_settings">Open settings</string>
+    <string name="content_description_close">Close</string>
+
+    <!-- Overlay -->
+    <string name="overlay_detected">Detected</string>
+    <string name="overlay_translation">Translation</string>
+    <string name="overlay_copy_text">Copy text</string>
+    <string name="overlay_copied">Copied!</string>
+
+    <!-- Hints -->
+    <string name="no_text_detected">Point camera at text to begin</string>
+    <string name="tts_not_ready">TTS engine initializing…</string>
+    <string name="language_not_supported">TTS does not support this language</string>
+
+    <!-- Voice & Playback -->
+    <string name="settings_section_voice">Voice &amp; Playback</string>
+    <string name="settings_speech_rate">Speech Rate</string>
+    <string name="settings_pitch">Pitch</string>
+    <string name="action_previous_sentence">Previous sentence</string>
+    <string name="action_next_sentence">Next sentence</string>
+    <string name="action_speed">Playback speed</string>
+    <string name="control_speed_label">%1$.1fx</string>
+
+    <!-- Accessibility -->
+    <string name="settings_section_accessibility">Accessibility</string>
+    <string name="settings_font_size">Text Size</string>
+
+    <!-- Sleep Timer -->
+    <string name="settings_section_sleep_timer">Sleep Timer</string>
+    <string name="settings_sleep_timer">Sleep Timer</string>
+    <string name="sleep_timer_off">Off</string>
+    <string name="sleep_timer_minutes">%1$d min</string>
+    <string name="action_set_sleep_timer">Set sleep timer</string>
+
+    <!-- Torch -->
+    <string name="torch_on">Turn off flashlight</string>
+    <string name="torch_off">Turn on flashlight</string>
+
+    <!-- Accessibility -->
+    <string name="action_swap_languages">Swap source and target languages</string>
+    <string name="content_description_camera_icon">Camera icon</string>
+    <string name="content_description_no_camera">Camera access blocked</string>
+
+    <!-- Language chip -->
+    <string name="top_bar_language_chip">%1$s → %2$s</string>
+
+    <!-- History -->
+    <string name="history_title">History</string>
+    <string name="history_empty">No scans yet. Point your camera at text and tap play.</string>
+    <string name="history_clear">Clear history</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_history">History</string>
+
+    <!-- Hub Screen -->
+    <string name="hub_title">TTS READER</string>
+
+    <!-- Hub Mode Tiles -->
+    <string name="mode_languages_title">Languages</string>
+    <string name="mode_languages_subtitle">Download &amp; Manage Translation Models</string>
+    <string name="mode_classic_tts_title">Classic TTS</string>
+    <string name="mode_classic_tts_subtitle">Camera-to-Speech Reader</string>
+    <string name="mode_babel_title">Babel Engine</string>
+    <string name="mode_babel_subtitle">Bi-Directional Speech Translation</string>
+    <string name="mode_dyslexia_title">Dyslexia Focus</string>
+    <string name="mode_dyslexia_subtitle">Line-Focus &amp; Visual Anchoring</string>
+    <string name="mode_ar_lens_title">AR Magic Lens</string>
+    <string name="mode_ar_lens_subtitle">Real-Time Overlay Translation</string>
+    <string name="mode_ereader_title">E-Reader</string>
+    <string name="mode_ereader_subtitle">AI-Powered Bilingual PDF Library</string>
+
+    <!-- Coming Soon -->
+    <string name="coming_soon">Coming Soon</string>
+    <string name="coming_soon_description">This mode is under active development.</string>
+    <string name="action_back_to_hub">Back to Hub</string>
+
+    <!-- Badges -->
+    <string name="badge_beta">BETA</string>
+    <string name="badge_soon">SOON</string>
+
+    <!-- Language not downloaded redirect -->
+    <string name="language_not_downloaded_msg">"%1$s" model not downloaded</string>
+    <string name="go_to_languages">Go to Languages</string>
+    <!-- Mic permission -->
+    <string name="permission_mic_denied">Microphone permission denied. Grant it in Settings to use Babel.</string>
+
+    <!-- Babel Engine -->
+    <string name="babel_session_title">BABEL ENGINE</string>
+    <string name="babel_speaker_a">Speaker A</string>
+    <string name="babel_speaker_b">Speaker B</string>
+    <string name="babel_start_session">Start Session</string>
+    <string name="babel_stop_session">End Session</string>
+    <string name="babel_listening">Listening\u2026</string>
+    <string name="babel_translating">Translating\u2026</string>
+    <string name="babel_ready">Ready to listen</string>
+    <string name="babel_select_language">Select Language</string>
+    <string name="babel_permission_required">Microphone permission is required for speech recognition.</string>
+    <string name="babel_grant_microphone">Grant Microphone</string>
+    <string name="babel_translation_failed">Translation failed. Tap mic to retry.</string>
+    <string name="babel_mic_a">Speaker A mic</string>
+    <string name="babel_mic_b">Speaker B mic</string>
+
+    <!-- Dyslexia Focus -->
+    <string name="dyslexia_title">DYSLEXIA FOCUS</string>
+    <string name="dyslexia_mode_camera">Camera</string>
+    <string name="dyslexia_mode_text">Text</string>
+    <string name="dyslexia_paste_hint">Paste text here\u2026</string>
+    <string name="dyslexia_paste_instruction">Paste your text below and tap READ to begin word-by-word reading.</string>
+    <string name="dyslexia_read_action">READ</string>
+    <string name="dyslexia_camera_hint">Point camera at text</string>
+    <string name="dyslexia_focus_label">FOCUS</string>
+    <string name="dyslexia_prev_word">Previous word</string>
+    <string name="dyslexia_next_word">Next word</string>
+    <string name="dyslexia_auto_read">Auto-read</string>
+    <string name="dyslexia_pause">Pause</string>
+
+    <!-- AR Magic Lens -->
+    <string name="ar_lens_title">MAGIC LENS</string>
+    <string name="ar_lens_pick_source">Detect text in…</string>
+    <string name="ar_lens_pick_target">Translate to…</string>
+    <string name="ar_lens_offline_banner">No internet — translation model download unavailable.</string>
+    <string name="ar_lens_translating">Translating\u2026</string>
+
+    <!-- E-Reader Reader Screen — Step 2 -->
+    <string name="reader_original_tab">Original</string>
+    <string name="reader_translation_tab">Translation</string>
+    <string name="reader_no_text">No readable text on this page</string>
+    <string name="reader_translating">Translating\u2026</string>
+    <string name="reader_page_indicator">Page %1$d / %2$d</string>
+    <string name="reader_pick_language">Translate to\u2026</string>
+
+    <!-- E-Reader Reader Screen — Steps 3 &amp; 4 -->
+    <string name="reader_read_aloud">Read aloud</string>
+    <string name="reader_stop_reading">Stop reading</string>
+    <string name="reader_typography">Typography settings</string>
+    <string name="reader_prev_sentence">Previous sentence</string>
+    <string name="reader_next_sentence">Next sentence</string>
+    <string name="reader_font_size">Font size</string>
+
+    <!-- E-Reader Library -->
+    <string name="ereader_library_title">LIBRARY</string>
+    <string name="ereader_empty_title">No books yet</string>
+    <string name="ereader_empty_subtitle">Tap + to import a PDF</string>
+    <string name="ereader_import_error">Failed to import PDF</string>
+    <string name="ereader_book_added">Book added to library</string>
+    <string name="ereader_delete_confirm">Delete this book?</string>
+
+    <!-- E-Reader Step 5 — AI Summarization -->
+    <string name="reader_summarize">Summarize page</string>
+    <string name="reader_summary_title">AI Summary</string>
+    <string name="reader_summary_error">Summary failed. Check your API key and connection.</string>
+    <string name="reader_api_key_title">Gemini API Key</string>
+    <string name="reader_api_key_hint">Paste your Gemini API key…</string>
+    <string name="reader_api_key_save">Save &amp; Summarize</string>
+    <string name="reader_api_key_info">Get a free key at aistudio.google.com</string>
+    <string name="reader_summary_read_aloud">Read summary aloud</string>
+    <string name="reader_summary_dismiss">Close</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title_1">Point Your Camera</string>
+    <string name="onboarding_desc_1">Aim your camera at any printed or handwritten text. The app instantly recognizes what it sees.</string>
+    <string name="onboarding_title_2">Tap Play to Listen</string>
+    <string name="onboarding_desc_2">Hear the recognized text read aloud. Control speed, skip sentences, and follow along with word-by-word highlighting.</string>
+    <string name="onboarding_title_3">Translate Instantly</string>
+    <string name="onboarding_desc_3">Choose your target language and get real-time translations. Works offline once models are downloaded.</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_get_started">Get Started</string>
+</resources>
