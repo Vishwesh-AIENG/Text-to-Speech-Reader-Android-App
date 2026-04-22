@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.app.ttsreader.ai.GeminiSummarizer
+import com.app.ttsreader.ai.GemmaModelManager
+import com.app.ttsreader.ai.GemmaModelState
+import com.app.ttsreader.ai.GemmaSummarizer
 import com.app.ttsreader.data.LibraryRepository
 import com.app.ttsreader.data.local.BookEntity
 import com.app.ttsreader.data.local.ReaderPrefsKeys
@@ -18,6 +20,7 @@ import com.app.ttsreader.tts.SpeechController
 import com.app.ttsreader.tts.TtsState
 import com.app.ttsreader.utils.LanguageUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,13 +105,13 @@ data class ReaderUiState(
     val currentWordStart: Int        = -1,
     val currentWordEnd: Int          = -1,
     val speechRate: Float            = 1.0f,
-    // Step 5 — AI Summarization
-    val geminiApiKey: String         = "",
-    val showApiKeyDialog: Boolean    = false,
-    val isSummarizing: Boolean       = false,
-    val summary: String              = "",
-    val summaryError: String?        = null,
-    val showSummary: Boolean         = false
+    // Step 5 — On-device Gemma AI Summarization
+    val gemmaModelState: GemmaModelState     = GemmaModelState.NotDownloaded,
+    val showGemmaDownloadPrompt: Boolean     = false,
+    val isSummarizing: Boolean               = false,
+    val summary: String                      = "",
+    val summaryError: String?                = null,
+    val showSummary: Boolean                 = false
 )
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
@@ -159,19 +162,38 @@ class ReaderViewModel(
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
     init {
+        // Initialise on-device Gemma model manager (checks for existing model file)
+        GemmaModelManager.init(getApplication())
+
         // Load persisted typography preferences, then load book
         viewModelScope.launch {
             val prefs = getApplication<Application>().readerDataStore.data.first()
             _uiState.value = _uiState.value.copy(
-                fontSize      = prefs[ReaderPrefsKeys.FONT_SIZE] ?: 16,
-                readerTheme   = try {
+                fontSize    = prefs[ReaderPrefsKeys.FONT_SIZE] ?: 16,
+                readerTheme = try {
                     ReaderTheme.valueOf(prefs[ReaderPrefsKeys.THEME] ?: ReaderTheme.DARK.name)
                 } catch (_: IllegalArgumentException) {
                     ReaderTheme.DARK
-                },
-                geminiApiKey  = prefs[ReaderPrefsKeys.GEMINI_API_KEY] ?: ""
+                }
             )
             loadBook()
+        }
+
+        // Mirror GemmaModelManager state into uiState
+        viewModelScope.launch {
+            GemmaModelManager.state.collect { modelState ->
+                _uiState.value = _uiState.value.copy(gemmaModelState = modelState)
+            }
+        }
+
+        // Poll download progress every second while downloading
+        viewModelScope.launch {
+            while (true) {
+                if (_uiState.value.gemmaModelState is GemmaModelState.Downloading) {
+                    GemmaModelManager.pollProgress(getApplication())
+                }
+                delay(1_000L)
+            }
         }
 
         // Observe TTS lifecycle state
@@ -353,47 +375,16 @@ class ReaderViewModel(
     // ── AI Summarization (Step 5) ─────────────────────────────────────────────
 
     /**
-     * Requests a Gemini summary of the current page text.
-     * Opens the API-key dialog if no key has been saved yet.
+     * Triggers on-device Gemma summarization of the current page.
+     * The model must be downloaded first — check [ReaderUiState.gemmaModelState].
      */
     fun requestSummary() {
-        val key = _uiState.value.geminiApiKey
-        if (key.isBlank()) {
-            _uiState.value = _uiState.value.copy(showApiKeyDialog = true)
-            return
-        }
-        launchSummary(key)
-    }
-
-    /**
-     * Persists [key] to DataStore, then immediately triggers summarization.
-     */
-    fun saveApiKeyAndSummarize(key: String) {
-        val trimmed = key.trim()
-        _uiState.value = _uiState.value.copy(
-            geminiApiKey    = trimmed,
-            showApiKeyDialog = false
-        )
-        viewModelScope.launch {
-            getApplication<Application>().readerDataStore.edit { prefs ->
-                prefs[ReaderPrefsKeys.GEMINI_API_KEY] = trimmed
-            }
-        }
-        if (trimmed.isNotBlank()) launchSummary(trimmed)
-    }
-
-    fun openApiKeyDialog()  { _uiState.value = _uiState.value.copy(showApiKeyDialog = true) }
-    fun closeApiKeyDialog() { _uiState.value = _uiState.value.copy(showApiKeyDialog = false) }
-    fun dismissSummary()    { _uiState.value = _uiState.value.copy(showSummary = false, summary = "", summaryError = null) }
-
-    private fun launchSummary(apiKey: String) {
+        if (_uiState.value.gemmaModelState !is GemmaModelState.Downloaded) return
         val state = _uiState.value
-        // Prefer translated text if visible, else original
+        // Prefer translated text if visible; fall back to original
         val text = if (state.showTranslation && state.translatedText.isNotEmpty())
             state.translatedText else state.rawText
         if (text.isBlank()) return
-
-        val targetLang = state.targetLang.displayName
 
         _uiState.value = _uiState.value.copy(
             isSummarizing = true,
@@ -404,7 +395,11 @@ class ReaderViewModel(
 
         viewModelScope.launch {
             try {
-                val result = GeminiSummarizer.summarize(apiKey, text, targetLang)
+                val result = GemmaSummarizer.summarize(
+                    context        = getApplication(),
+                    text           = text,
+                    targetLanguage = state.targetLang.displayName
+                )
                 _uiState.value = _uiState.value.copy(
                     isSummarizing = false,
                     summary       = result
@@ -412,10 +407,29 @@ class ReaderViewModel(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSummarizing = false,
-                    summaryError  = e.message ?: "Unknown error"
+                    summaryError  = e.message ?: "Summarization failed"
                 )
             }
         }
+    }
+
+    /** Shows the download confirmation prompt. Called when user taps ✨ and model is missing. */
+    fun promptGemmaDownload() {
+        _uiState.value = _uiState.value.copy(showGemmaDownloadPrompt = true)
+    }
+
+    /** User confirmed — start the background download (~1.3 GB). */
+    fun confirmGemmaDownload() {
+        _uiState.value = _uiState.value.copy(showGemmaDownloadPrompt = false)
+        GemmaModelManager.startDownload(getApplication())
+    }
+
+    fun dismissGemmaDownloadPrompt() {
+        _uiState.value = _uiState.value.copy(showGemmaDownloadPrompt = false)
+    }
+
+    fun dismissSummary() {
+        _uiState.value = _uiState.value.copy(showSummary = false, summary = "", summaryError = null)
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────

@@ -1,8 +1,10 @@
 package com.app.ttsreader.camera
 
 import android.content.Context
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.core.content.ContextCompat
 import com.app.ttsreader.ocr.SpatialWord
 import com.app.ttsreader.ocr.TextRecognitionRepository
 import com.google.mlkit.vision.common.InputImage
@@ -33,11 +35,13 @@ class TextAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-    private val mainExecutor: Executor = context.mainExecutor
+    // Use ContextCompat to support API 24–27 (Context.getMainExecutor requires API 28).
+    private val mainExecutor: Executor = ContextCompat.getMainExecutor(context)
 
     private var lastAnalyzedTimestamp = 0L
     private val isProcessing = AtomicBoolean(false)
 
+    @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
         val now = System.currentTimeMillis()
 

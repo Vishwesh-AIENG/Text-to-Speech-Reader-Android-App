@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto-Backup rules for Android 6.0–11 (API 23–30).
+  Excludes sensitive user data: Gemini API key and cached OCR/translation data.
+-->
+<full-backup-content>
+    <!-- Exclude user-supplied Gemini API key stored in reader preferences -->
+    <exclude domain="file" path="datastore/reader_prefs.preferences_pb" />
+    <!-- Exclude imported book files (may be large + user-private) -->
+    <exclude domain="file" path="ereader_books/" />
+</full-backup-content>

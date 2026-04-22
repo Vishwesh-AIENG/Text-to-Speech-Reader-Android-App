@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,25 +8,68 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// ── Optional release signing config ────────────────────────────────────────────
+// To sign a release AAB/APK locally, create `keystore.properties` at the project
+// root (already git-ignored via `*.properties`/`keystore.properties`) with:
+//
+//   storeFile=/absolute/path/to/release.jks
+//   storePassword=...
+//   keyAlias=...
+//   keyPassword=...
+//
+// If the file is missing (e.g. CI or a fresh clone), the release build falls
+// back to the debug signing config so Play App Signing can still re-sign the
+// uploaded bundle on Google's side.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
+}
+val hasReleaseSigning = keystoreProperties.getProperty("storeFile")?.let { file(it).exists() } == true
+
 android {
     namespace = "com.app.ttsreader"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.app.ttsreader"
+        applicationId = "com.app.omnilingo"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        // No `ndk.abiFilters` override: the Android App Bundle generates per-ABI
+        // splits automatically for all native libs shipped by ML Kit/CameraX,
+        // which satisfies Google Play's 64-bit requirement while still serving
+        // 32-bit-only devices on API 24+.
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile     = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias      = keystoreProperties.getProperty("keyAlias")
+                keyPassword   = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            isDebuggable = false
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -103,6 +149,6 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
-    // Gemini Generative AI — cloud AI summarization bridge (Step 5)
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    // MediaPipe LLM Inference — on-device Gemma summarization (no API key required)
+    implementation("com.google.mediapipe:tasks-genai:0.10.22")
 }

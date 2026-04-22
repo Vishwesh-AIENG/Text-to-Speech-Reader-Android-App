@@ -49,7 +49,7 @@ import com.app.ttsreader.ui.screens.LanguagesScreen
 import com.app.ttsreader.ui.screens.MainScreen
 import com.app.ttsreader.ui.screens.OnboardingScreen
 import com.app.ttsreader.ui.screens.SettingsScreen
-import com.app.ttsreader.ui.theme.TTSReaderTheme
+import com.app.ttsreader.ui.theme.OmniLingoTheme
 import com.app.ttsreader.viewmodel.SettingsViewModel
 
 class MainActivity : ComponentActivity() {
@@ -89,7 +89,7 @@ private fun AppRoot() {
     )
     var activeMode by rememberSaveable(stateSaver = appModeSaver) { mutableStateOf(null) }
 
-    TTSReaderTheme {
+    OmniLingoTheme {
         when {
             // ── 1. Onboarding (first launch) ─────────────────────────────────
             !settingsState.onboardingShown -> {

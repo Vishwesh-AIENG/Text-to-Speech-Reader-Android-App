@@ -111,7 +111,7 @@ All four camera modes have their own `ImageAnalysis.Analyzer`. **All use `Native
 
 - **PDF OCR** (`pdf/PdfTextExtractor.kt`): ML Kit `TextRecognition` on `PdfRenderer`-decoded page bitmaps.
 - **Translation** (`translate/TranslationRepository.kt`): ML Kit on-device translation, cached per language pair.
-- **Summarization** (`ai/GeminiSummarizer.kt`): Gemini API (cloud, requires network).
+- **Summarization** (`ai/GemmaSummarizer.kt`): On-device Gemma via MediaPipe LLM Inference (no API key, no network after one-time model download).
 
 ---
 

@@ -1,6 +1,7 @@
 package com.app.ttsreader.camera
 
 import android.util.Log
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.app.ttsreader.ocr.SpatialWord
@@ -41,6 +42,7 @@ class ArLensAnalyzer(
     private var lastTimestamp = 0L
     private val busy = AtomicBoolean(false)
 
+    @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
         val now = System.currentTimeMillis()
         if (now - lastTimestamp < throttleMs || !busy.compareAndSet(false, true)) {

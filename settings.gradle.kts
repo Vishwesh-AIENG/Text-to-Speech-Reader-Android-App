@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TTSReader"
+rootProject.name = "OmniLingo"
 include(":app")

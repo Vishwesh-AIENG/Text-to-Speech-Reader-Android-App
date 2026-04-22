@@ -14,7 +14,7 @@
 
 [![ML Kit](https://img.shields.io/badge/ML_Kit-FF6F00?style=flat-square&logo=google&logoColor=white)](https://developers.google.com/ml-kit)
 [![CameraX](https://img.shields.io/badge/CameraX-4CAF50?style=flat-square&logo=android&logoColor=white)](https://developer.android.com/training/camerax)
-[![Gemini AI](https://img.shields.io/badge/Gemini_AI-8E24AA?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev)
+[![Gemma On-Device](https://img.shields.io/badge/Gemma-On--Device_AI-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android)
 [![Room](https://img.shields.io/badge/Room_DB-FF5722?style=flat-square&logo=sqlite&logoColor=white)](https://developer.android.com/training/data-storage/room)
 [![Material3](https://img.shields.io/badge/Material_3-757575?style=flat-square&logo=material-design&logoColor=white)](https://m3.material.io)
 
@@ -123,11 +123,12 @@ See the world **in your language** — translated text appears directly on top o
 <summary><b>📚 E-Reader — AI-Powered Bilingual Library</b></summary>
 <br/>
 
-Import documents, read them bilingually, and get **AI-generated summaries** powered by Gemini.
+Import documents, read them bilingually, and get **AI-generated summaries** powered by on-device Gemma — no internet, no API key, no cloud.
 
 - 📄 **Supports PDF, DOCX, DOC, TXT** — import any document
 - 🌐 **Side-by-side bilingual view** — original & translation tabs on every page
-- 🤖 **Gemini AI Summaries** — 4–6 bullet point summaries per page in any language
+- 🤖 **On-device Gemma Summaries** — 4–6 bullet points per page, runs entirely on your device
+- 🔒 **100% private** — your documents never leave your phone
 - 🔊 **Read-aloud** with sentence navigation for immersive listening
 - 📖 **Personal library** — full local book management with import/delete
 - 🔡 **Adjustable font size** for comfortable reading
@@ -190,7 +191,7 @@ Full control over which translation models live on your device.
 │                  Device / SDK Layer                   │
 │   CameraX · ML Kit OCR · ML Kit Translate            │
 │   Android TTS · SpeechRecognizer · OpenGL ES 2.0     │
-│   Gemini AI (cloud) · PdfRenderer                    │
+│   Gemma (on-device, MediaPipe) · PdfRenderer         │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -218,7 +219,7 @@ Full control over which translation models live on your device.
 | **Camera** | CameraX |
 | **OCR** | ML Kit Text Recognition |
 | **Translation** | ML Kit On-Device Translator |
-| **AI Summaries** | Google Gemini 1.5 Flash |
+| **AI Summaries** | Google Gemma (on-device · MediaPipe LLM Inference) |
 | **Speech-to-Text** | Android SpeechRecognizer |
 | **Text-to-Speech** | Android TextToSpeech |
 | **Database** | Room (SQLite) |
@@ -248,7 +249,7 @@ Full control over which translation models live on your device.
 ### Prerequisites
 - Android Studio Hedgehog or later
 - Android device or emulator with API 24+
-- (Optional) Gemini API key for AI summaries — free at [aistudio.google.com](https://aistudio.google.com)
+- ~1.3 GB free storage for the on-device Gemma AI model (downloaded in-app on first use)
 
 ### Build & Run
 
@@ -289,7 +290,7 @@ keyPassword=your_key_password
 |---|---|
 | `CAMERA` | Live OCR, AR Lens, Dyslexia Focus |
 | `RECORD_AUDIO` | Babel Engine speech recognition |
-| `INTERNET` | ML Kit model downloads, Gemini AI summaries |
+| `INTERNET` | ML Kit model downloads · Gemma model download (one-time) |
 | `ACCESS_NETWORK_STATE` | Offline detection banner |
 
 > All permissions are requested at runtime with clear rationale dialogs.  
@@ -303,7 +304,7 @@ keyPassword=your_key_password
 - [x] Babel bi-directional conversation engine
 - [x] Dyslexia Focus mode
 - [x] AR Magic Lens overlay
-- [x] E-Reader with Gemini AI summaries
+- [x] E-Reader with on-device Gemma AI summaries (no API key · fully private)
 - [x] Glassmorphism UI redesign
 - [x] Background execution isolation
 - [ ] Instant Indexing mode *(in development)*

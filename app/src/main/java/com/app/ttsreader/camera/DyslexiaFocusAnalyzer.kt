@@ -2,8 +2,10 @@ package com.app.ttsreader.camera
 
 import android.content.Context
 import android.util.Log
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.core.content.ContextCompat
 import com.app.ttsreader.ocr.SpatialWord
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -33,11 +35,12 @@ class DyslexiaFocusAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-    private val mainExecutor: Executor = context.mainExecutor
+    private val mainExecutor: Executor = ContextCompat.getMainExecutor(context)
 
     private var lastTimestamp = 0L
     private val busy = AtomicBoolean(false)
 
+    @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
         val now = System.currentTimeMillis()
         if (now - lastTimestamp < throttleMs || !busy.compareAndSet(false, true)) {

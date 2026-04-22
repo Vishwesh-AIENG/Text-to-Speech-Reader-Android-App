@@ -13,6 +13,8 @@ captures/
 *.jks
 *.keystore
 keystore.properties
+/keystore.properties
+app/keystore.properties
 
 # NDK / CMake generated
 .externalNativeBuild/
@@ -37,9 +39,11 @@ app/src/release/
 # ProGuard mapping (keep locally, don't commit)
 mapping.txt
 
-# Test results
+# Test results (XML reports from Gradle/JUnit)
 *.xml
 !app/src/main/res/**/*.xml
+!app/src/main/AndroidManifest.xml
+!app/src/main/res/xml/*.xml
 
 # macOS
 .DS_Store

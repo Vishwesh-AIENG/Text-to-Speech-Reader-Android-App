@@ -36,8 +36,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.app.ttsreader.R
+import com.app.ttsreader.ai.GemmaModelState
 import com.app.ttsreader.domain.model.AppLanguage
 import com.app.ttsreader.tts.TtsState
 import com.app.ttsreader.utils.LanguageUtils
@@ -176,17 +176,57 @@ fun ReaderScreen(
                     )
                 }
 
-                // AI Summarize button
-                IconButton(
-                    onClick = vm::requestSummary,
-                    enabled = state.rawText.isNotEmpty() && !state.isSummarizing
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = stringResource(R.string.reader_summarize),
-                        tint = if (state.rawText.isNotEmpty()) theme.textColor else theme.dimTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
+                // AI Summarize button — behaviour depends on Gemma model state
+                when (val modelState = state.gemmaModelState) {
+                    is GemmaModelState.Downloaded -> {
+                        IconButton(
+                            onClick = vm::requestSummary,
+                            enabled = state.rawText.isNotEmpty() && !state.isSummarizing
+                        ) {
+                            Icon(
+                                imageVector        = Icons.Default.AutoAwesome,
+                                contentDescription = stringResource(R.string.reader_summarize),
+                                tint               = if (state.rawText.isNotEmpty()) theme.textColor
+                                                     else theme.dimTextColor,
+                                modifier           = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    is GemmaModelState.Downloading -> {
+                        // Show circular download progress
+                        Box(
+                            modifier          = Modifier.size(40.dp),
+                            contentAlignment  = Alignment.Center
+                        ) {
+                            val pct = modelState.progressPercent
+                            if (pct > 0) {
+                                CircularProgressIndicator(
+                                    progress           = { pct / 100f },
+                                    modifier           = Modifier.size(22.dp),
+                                    color              = theme.textColor,
+                                    strokeWidth        = 2.dp,
+                                    trackColor         = theme.borderColor
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier    = Modifier.size(22.dp),
+                                    color       = theme.textColor,
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        // Not downloaded — tap to show download prompt
+                        IconButton(onClick = vm::promptGemmaDownload) {
+                            Icon(
+                                imageVector        = Icons.Default.AutoAwesome,
+                                contentDescription = stringResource(R.string.gemma_download_title),
+                                tint               = theme.dimTextColor,
+                                modifier           = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
 
                 // Typography toggle button
@@ -347,12 +387,14 @@ fun ReaderScreen(
             )
         }
 
-        // ── API key entry dialog ───────────────────────────────────────────────
-        if (state.showApiKeyDialog) {
-            ApiKeyInputDialog(
-                theme     = theme,
-                onSave    = vm::saveApiKeyAndSummarize,
-                onDismiss = vm::closeApiKeyDialog
+        // ── Gemma model download prompt ────────────────────────────────────────
+        if (state.showGemmaDownloadPrompt) {
+            val errorMsg = (state.gemmaModelState as? GemmaModelState.Error)?.message
+            GemmaDownloadDialog(
+                theme      = theme,
+                errorMsg   = errorMsg,
+                onDownload = vm::confirmGemmaDownload,
+                onDismiss  = vm::dismissGemmaDownloadPrompt
             )
         }
 
@@ -729,70 +771,71 @@ private fun SummarySheet(
     )
 }
 
-// ── API key input dialog ──────────────────────────────────────────────────────
+// ── Gemma model download dialog ───────────────────────────────────────────────
 
 @Composable
-private fun ApiKeyInputDialog(
-    theme:    ReaderTheme,
-    onSave:   (String) -> Unit,
-    onDismiss: () -> Unit
+private fun GemmaDownloadDialog(
+    theme:      ReaderTheme,
+    errorMsg:   String?,
+    onDownload: () -> Unit,
+    onDismiss:  () -> Unit
 ) {
-    var keyText by remember { mutableStateOf("") }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor   = theme.surfaceColor,
         title = {
-            Text(
-                text       = stringResource(R.string.reader_api_key_title),
-                color      = theme.textColor,
-                fontWeight = FontWeight.Bold,
-                fontSize   = 16.sp
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint     = theme.textColor,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text       = stringResource(R.string.gemma_download_title),
+                    color      = theme.textColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 16.sp
+                )
+            }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value         = keyText,
-                    onValueChange = { keyText = it },
-                    placeholder   = {
-                        Text(
-                            text  = stringResource(R.string.reader_api_key_hint),
-                            color = theme.dimTextColor,
-                            fontSize = 13.sp
-                        )
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor     = theme.textColor,
-                        unfocusedTextColor   = theme.textColor,
-                        focusedBorderColor   = theme.textColor,
-                        unfocusedBorderColor = theme.borderColor,
-                        cursorColor          = theme.textColor
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
                 Text(
-                    text     = stringResource(R.string.reader_api_key_info),
+                    text     = stringResource(R.string.gemma_download_body),
+                    color    = theme.textColor,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+                if (errorMsg != null) {
+                    Text(
+                        text     = errorMsg,
+                        color    = theme.textColor.copy(alpha = 0.70f),
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    text     = stringResource(R.string.gemma_download_note),
                     color    = theme.dimTextColor,
                     fontSize = 12.sp
                 )
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = { onSave(keyText) },
-                enabled = keyText.isNotBlank()
-            ) {
+            TextButton(onClick = onDownload) {
                 Text(
-                    text  = stringResource(R.string.reader_api_key_save),
-                    color = if (keyText.isNotBlank()) theme.textColor else theme.dimTextColor
+                    text  = stringResource(R.string.gemma_download_confirm),
+                    color = theme.textColor,
+                    fontWeight = FontWeight.Bold
                 )
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(text = "Cancel", color = theme.dimTextColor)
+                Text(text = stringResource(R.string.gemma_download_cancel), color = theme.dimTextColor)
             }
         }
     )

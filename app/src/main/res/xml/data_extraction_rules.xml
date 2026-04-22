@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31+) Data Extraction Rules.
+  Applied to both cloud auto-backup and device-to-device transfer.
+  We exclude the Gemini API key and user-imported books so they are never
+  copied off-device through Google's backup channel.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/reader_prefs.preferences_pb" />
+        <exclude domain="file" path="ereader_books/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/reader_prefs.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>

@@ -14,7 +14,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun TTSReaderTheme(content: @Composable () -> Unit) {
+fun OmniLingoTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
         typography  = Typography,
