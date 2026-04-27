@@ -151,4 +151,10 @@ dependencies {
 
     // MediaPipe LLM Inference — on-device Gemma summarization (no API key required)
     implementation("com.google.mediapipe:tasks-genai:0.10.22")
+
+    // Baseline Profile — precompiles critical code paths for faster startup
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+
+    // Google Play In-App Review API — prompts users to rate without leaving the app
+    implementation("com.google.android.play:review-ktx:2.0.2")
 }

@@ -133,7 +133,7 @@ fun LanguagesScreen(
                     horizontal = 16.dp, vertical = 8.dp
                 )
             ) {
-                items(uiState.availableLanguages) { language ->
+                items(uiState.availableLanguages, key = { it.mlKitCode }) { language ->
                     val code         = language.mlKitCode
                     val isDownloaded = code in uiState.downloadedModelCodes
                     val isDownloading = code in uiState.downloadingModelCodes

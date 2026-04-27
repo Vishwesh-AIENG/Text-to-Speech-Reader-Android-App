@@ -49,6 +49,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 import java.text.BreakIterator
+import androidx.compose.runtime.Stable
+import com.app.ttsreader.review.InAppReviewManager
 
 /**
  * Central orchestrator for the entire TTS Reader screen.
@@ -689,7 +691,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         speechController.speakSentences(sentences, resumeIndex)
 
-        // Save to history when starting playback (skip if resuming same text)
+        // Save to history and increment review counter when starting playback.
         if (resumeIndex == 0) {
             viewModelScope.launch {
                 runCatching {
@@ -701,6 +703,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }
+            // Track usage for the in-app review prompt threshold.
+            InAppReviewManager.incrementSpeakCount(getApplication())
         }
     }
 
@@ -973,7 +977,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 /**
  * Immutable snapshot of the entire screen's UI state.
+ *
+ * Annotated [@Stable] (not [@Immutable]) because [List] and [Set] fields are not
+ * Compose-verifiable as structurally immutable. The object is always replaced
+ * atomically via StateFlow.value so structural equality comparisons are correct.
  */
+@Stable
 data class MainUiState(
     // OCR
     val recognizedText: String = "",

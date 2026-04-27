@@ -157,8 +157,12 @@ fun BabelScreen(
     }
 
     // ── Derived display data ───────────────────────────────────────────────────
-    val lastSpokenByTop    = uiState.turns.lastOrNull { it.isTopSpeaker }
-    val lastSpokenByBottom = uiState.turns.lastOrNull { !it.isTopSpeaker }
+    // remember(key) ensures these are only recomputed when uiState.turns actually
+    // changes, rather than on every recomposition triggered by other state fields
+    // (rmsLevel, phase, etc.) in BabelUiState. Plain val (not delegated) so that
+    // Kotlin's smart-cast works in the null-guarded branches below.
+    val lastSpokenByTop    = remember(uiState.turns) { uiState.turns.lastOrNull { it.isTopSpeaker } }
+    val lastSpokenByBottom = remember(uiState.turns) { uiState.turns.lastOrNull { !it.isTopSpeaker } }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -513,7 +517,7 @@ fun BabelScreen(
             )
 
             LazyColumn(modifier = Modifier.padding(bottom = 32.dp)) {
-                items(LanguageUtils.SUPPORTED_LANGUAGES) { lang ->
+                items(LanguageUtils.SUPPORTED_LANGUAGES, key = { it.mlKitCode }) { lang ->
                     val isSelected = lang.mlKitCode == title ||
                                      lang.displayName == title
 

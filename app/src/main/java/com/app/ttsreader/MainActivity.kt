@@ -49,6 +49,7 @@ import com.app.ttsreader.ui.screens.LanguagesScreen
 import com.app.ttsreader.ui.screens.MainScreen
 import com.app.ttsreader.ui.screens.OnboardingScreen
 import com.app.ttsreader.ui.screens.SettingsScreen
+import com.app.ttsreader.review.InAppReviewManager
 import com.app.ttsreader.ui.theme.OmniLingoTheme
 import com.app.ttsreader.viewmodel.SettingsViewModel
 
@@ -56,6 +57,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Pre-warm the Play review flow early so ReviewInfo is ready when needed.
+        InAppReviewManager.preWarm(this)
         setContent { AppRoot() }
     }
 }

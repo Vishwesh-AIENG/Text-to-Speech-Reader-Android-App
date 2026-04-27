@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.ttsreader.domain.model.AppLanguage
@@ -29,6 +30,10 @@ enum class BabelPhase { IDLE, LISTENING, TRANSLATING, SPEAKING }
 enum class PickerTarget { TOP, BOTTOM }
 
 // ── UI state ───────────────────────────────────────────────────────────────────
+// @Stable (not @Immutable) because List<BabelTurn> is not Compose-verifiable
+// as structurally immutable, but the whole object is replaced atomically via
+// StateFlow, so Compose can rely on equality comparisons being correct.
+@Stable
 data class BabelUiState(
     val sessionActive: Boolean = false,
     val phase: BabelPhase = BabelPhase.IDLE,

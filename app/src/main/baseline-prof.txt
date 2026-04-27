@@ -1,0 +1,32 @@
+# Baseline Profile for TTS Reader / OmniLingo
+#
+# Covers the critical startup path: Application → MainActivity → HubScreen,
+# plus the most-used mode (Classic TTS → MainScreen) and core OCR/TTS pipelines.
+#
+# Format: https://developer.android.com/topic/performance/baselineprofiles/create-baselineprofile
+# Each line: H = hot (startup-critical), S = warm, P = post-startup
+#
+# ── App startup ──────────────────────────────────────────────────────────────
+HSPLcom/app/ttsreader/OmniLingoApp;->onCreate()V
+HSPLcom/app/ttsreader/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/app/ttsreader/MainActivity;->AppRoot()V
+# ── Hub screen ───────────────────────────────────────────────────────────────
+HSPLcom/app/ttsreader/ui/screens/HubScreenKt;->HubScreen(Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/app/ttsreader/ui/components/GlassBackgroundKt;->GlassBackground(Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/app/ttsreader/ui/components/HubModeTileKt;->HubModeTile(Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/functions/Function0;ILandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+# ── Classic TTS mode ─────────────────────────────────────────────────────────
+HSPLcom/app/ttsreader/ui/screens/MainScreenKt;->MainScreen(Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;FLcom/app/ttsreader/viewmodel/MainViewModel;Landroidx/compose/runtime/Composer;II)V
+HSPLcom/app/ttsreader/viewmodel/MainViewModel;-><init>(Landroid/app/Application;)V
+HSPLcom/app/ttsreader/ocr/TextRecognitionRepository;-><init>()V
+HSPLcom/app/ttsreader/translate/TranslationRepository;-><init>()V
+HSPLcom/app/ttsreader/tts/SpeechController;-><init>(Landroid/content/Context;)V
+HSPLcom/app/ttsreader/camera/CameraController;-><init>(Landroid/content/Context;)V
+# ── UI components ─────────────────────────────────────────────────────────────
+HSPLcom/app/ttsreader/ui/components/ControlBarKt;->ControlBar(ZZFFFIIIILkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+HSPLcom/app/ttsreader/ui/components/CameraPreviewKt;->CameraPreview(Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/app/ttsreader/ui/components/RecognizedTextOverlayKt;->RecognizedTextOverlay(Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;IIILandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;I)V
+# ── History screen ────────────────────────────────────────────────────────────
+SPLcom/app/ttsreader/ui/screens/HistoryScreenKt;->HistoryScreen(Landroidx/compose/ui/Modifier;Lcom/app/ttsreader/viewmodel/HistoryViewModel;Landroidx/compose/runtime/Composer;II)V
+SPLcom/app/ttsreader/viewmodel/HistoryViewModel;-><init>(Landroid/app/Application;)V
+# ── Theme ─────────────────────────────────────────────────────────────────────
+HSPLcom/app/ttsreader/ui/theme/ThemeKt;->OmniLingoTheme(ZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V

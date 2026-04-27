@@ -53,6 +53,7 @@ import com.app.ttsreader.ui.components.OfflineBanner
 import com.app.ttsreader.ui.components.PermissionHandler
 import com.app.ttsreader.ui.components.RecognizedTextOverlay
 import com.app.ttsreader.ui.components.SettingsButton
+import com.app.ttsreader.review.InAppReviewManager
 import com.app.ttsreader.ui.components.tap
 import com.app.ttsreader.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -81,6 +82,7 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
 
     // Stop camera + TTS when this screen is no longer active (user switched mode).
     // Everything restarts automatically via onPreviewViewReady when screen re-enters.
@@ -104,6 +106,14 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         viewModel.ocrLockHaptic.collectLatest {
             haptic.tap()
+        }
+    }
+
+    // In-App Review: prompt when TTS starts playing (after usage threshold is met).
+    // isSpeaking transitions false → true indicate a fresh playback start.
+    LaunchedEffect(uiState.isSpeaking) {
+        if (uiState.isSpeaking && activity != null) {
+            InAppReviewManager.maybeAskForReview(activity)
         }
     }
 
