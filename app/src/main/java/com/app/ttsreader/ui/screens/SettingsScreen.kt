@@ -164,6 +164,14 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             // ── Section 2: Voice & Playback ────────────────────────────
+            // Cache formatted labels — only recomputed when the underlying value changes
+            val speechRateLabel = remember(uiState.speechRate) {
+                String.format("%.2fx", uiState.speechRate)
+            }
+            val pitchLabel = remember(uiState.pitch) {
+                String.format("%.2fx", uiState.pitch)
+            }
+
             GlassSettingsCard(
                 title          = stringResource(R.string.settings_section_voice),
                 animationDelay = 200
@@ -174,7 +182,7 @@ fun SettingsScreen(
                     onValueChange = { settingsViewModel.setSpeechRate(it) },
                     range         = 0.5f..2.0f,
                     steps         = 5,
-                    valueLabel    = String.format("%.2fx", uiState.speechRate)
+                    valueLabel    = speechRateLabel
                 )
 
                 GlassDivider()
@@ -185,7 +193,7 @@ fun SettingsScreen(
                     onValueChange = { settingsViewModel.setPitch(it) },
                     range         = 0.5f..2.0f,
                     steps         = 5,
-                    valueLabel    = String.format("%.2fx", uiState.pitch)
+                    valueLabel    = pitchLabel
                 )
             }
 

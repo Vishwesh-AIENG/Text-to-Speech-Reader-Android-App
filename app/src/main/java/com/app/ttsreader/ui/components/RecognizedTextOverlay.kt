@@ -194,17 +194,25 @@ fun RecognizedTextOverlay(
                 )
 
                 // ── Recognized text (highlighted if source is being spoken) ─
+                // sentenceStart only changes when text or the active sentence changes,
+                // NOT on every word advance — avoids O(n) indexOf on each word tick.
+                val recogSentenceStart = remember(recognizedText, sentences, currentSentenceIndex) {
+                    if (currentSentenceIndex in sentences.indices)
+                        recognizedText.indexOf(sentences[currentSentenceIndex])
+                    else -1
+                }
                 val recognizedAnnotated = remember(
                     recognizedText, sentences, currentSentenceIndex,
                     currentWordStart, currentWordEnd, hasTranslated
                 ) {
                     buildHighlightedText(
-                        text             = recognizedText,
-                        sentences        = sentences,
-                        currentIndex     = currentSentenceIndex,
-                        wordStart        = currentWordStart,
-                        wordEnd          = currentWordEnd,
-                        isTranslatedMode = hasTranslated
+                        text                = recognizedText,
+                        sentences           = sentences,
+                        currentIndex        = currentSentenceIndex,
+                        wordStart           = currentWordStart,
+                        wordEnd             = currentWordEnd,
+                        isTranslatedMode    = hasTranslated,
+                        cachedSentenceStart = recogSentenceStart
                     )
                 }
                 Text(
@@ -243,17 +251,23 @@ fun RecognizedTextOverlay(
                         )
                     } else {
                         // Translated text — highlighted if translation is being spoken
+                        val transSentenceStart = remember(translatedText, sentences, currentSentenceIndex) {
+                            if (currentSentenceIndex in sentences.indices)
+                                translatedText.indexOf(sentences[currentSentenceIndex])
+                            else -1
+                        }
                         val translatedAnnotated = remember(
                             translatedText, sentences, currentSentenceIndex,
                             currentWordStart, currentWordEnd
                         ) {
                             buildHighlightedText(
-                                text             = translatedText,
-                                sentences        = sentences,
-                                currentIndex     = currentSentenceIndex,
-                                wordStart        = currentWordStart,
-                                wordEnd          = currentWordEnd,
-                                isTranslatedMode = true
+                                text                = translatedText,
+                                sentences           = sentences,
+                                currentIndex        = currentSentenceIndex,
+                                wordStart           = currentWordStart,
+                                wordEnd             = currentWordEnd,
+                                isTranslatedMode    = true,
+                                cachedSentenceStart = transSentenceStart
                             )
                         }
                         Text(
@@ -279,13 +293,17 @@ private fun buildHighlightedText(
     currentIndex: Int,
     wordStart: Int = -1,
     wordEnd: Int = -1,
-    isTranslatedMode: Boolean
+    isTranslatedMode: Boolean,
+    // Pre-computed by the caller so indexOf() doesn't re-run on every word advance.
+    // Pass Int.MIN_VALUE (default) to let this function compute it as a fallback.
+    cachedSentenceStart: Int = Int.MIN_VALUE
 ): AnnotatedString {
     if (currentIndex < 0 || currentIndex >= sentences.size || sentences.isEmpty()) {
         return AnnotatedString(text)
     }
     val sentence    = sentences[currentIndex]
-    val startOffset = text.indexOf(sentence)
+    val startOffset = if (cachedSentenceStart != Int.MIN_VALUE) cachedSentenceStart
+                      else text.indexOf(sentence)
     if (startOffset < 0) return AnnotatedString(text)
 
     // Glass card is dark — use cyan/white highlights for both modes.

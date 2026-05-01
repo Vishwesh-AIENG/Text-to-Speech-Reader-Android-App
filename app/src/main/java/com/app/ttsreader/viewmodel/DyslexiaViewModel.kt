@@ -43,6 +43,8 @@ data class DyslexiaUiState(
     // Text mode
     val rawText: String              = "",
     val paragraphs: List<List<String>> = emptyList(),   // [paragraphs][words]
+    /** Pre-joined display strings — avoids List.joinToString(" ") on every recomposition. */
+    val joinedParagraphs: List<String> = emptyList(),
     val activeParagraphIdx: Int      = 0,
     val activeWordIdx: Int           = 0,
     val isEditingText: Boolean       = true,
@@ -218,6 +220,7 @@ class DyslexiaViewModel(application: Application) : AndroidViewModel(application
         if (parsed.isEmpty()) return
         _uiState.value = _uiState.value.copy(
             paragraphs         = parsed,
+            joinedParagraphs   = parsed.map { it.joinToString(" ") },
             activeParagraphIdx = 0,
             activeWordIdx      = 0,
             isEditingText      = false,

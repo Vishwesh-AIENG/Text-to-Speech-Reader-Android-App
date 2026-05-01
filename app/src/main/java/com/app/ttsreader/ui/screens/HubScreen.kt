@@ -175,7 +175,7 @@ fun HubScreen(
                         modifier       = Modifier
                             .fillMaxWidth()
                             .height(252.dp)
-                            .graphicsLayer { scaleX = 0.97f; scaleY = 0.97f; alpha = 0.94f }
+                            .graphicsLayer(scaleX = 0.97f, scaleY = 0.97f, alpha = 0.94f)
                     )
                 }
 
@@ -205,7 +205,7 @@ fun HubScreen(
                         modifier       = Modifier
                             .fillMaxWidth()
                             .height(252.dp)
-                            .graphicsLayer { scaleX = 0.97f; scaleY = 0.97f; alpha = 0.94f }
+                            .graphicsLayer(scaleX = 0.97f, scaleY = 0.97f, alpha = 0.94f)
                     )
                 }
 
@@ -236,7 +236,7 @@ fun HubScreen(
                         modifier       = Modifier
                             .fillMaxWidth()
                             .height(252.dp)
-                            .graphicsLayer { scaleX = 0.97f; scaleY = 0.97f; alpha = 0.94f }
+                            .graphicsLayer(scaleX = 0.97f, scaleY = 0.97f, alpha = 0.94f)
                     )
                 }
             }

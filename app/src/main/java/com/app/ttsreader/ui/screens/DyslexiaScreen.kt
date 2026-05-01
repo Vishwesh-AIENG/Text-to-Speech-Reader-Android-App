@@ -1,6 +1,7 @@
 package com.app.ttsreader.ui.screens
 
 import android.Manifest
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -40,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -218,16 +220,17 @@ private fun ModeTab(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val bg     = if (selected) HubColors.NeonGreenFaint else Color.Transparent
-    val border = if (selected) HubColors.NeonGreen      else HubColors.NeonGreenBorder
-    val tint   = if (selected) HubColors.NeonGreen      else HubColors.NeonGreenDim
+    val bg        = if (selected) HubColors.NeonGreenFaint else Color.Transparent
+    val border    = if (selected) HubColors.NeonGreen      else HubColors.NeonGreenBorder
+    val tint      = if (selected) HubColors.NeonGreen      else HubColors.NeonGreenDim
+    val tabShape  = remember { RoundedCornerShape(20.dp) }
 
     Row(
         modifier = Modifier
             .subtleNeonGlow(cornerRadius = 20.dp, glowRadius = if (selected) 6.dp else 2.dp, intensity = if (selected) 0.12f else 0.03f)
-            .clip(RoundedCornerShape(20.dp))
-            .border(BorderStroke(1.dp, border), RoundedCornerShape(20.dp))
-            .background(bg, RoundedCornerShape(20.dp))
+            .clip(tabShape)
+            .border(BorderStroke(1.dp, border), tabShape)
+            .background(bg, tabShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment     = Alignment.CenterVertically,
@@ -396,6 +399,7 @@ private fun TextInputView(
     uiState: com.app.ttsreader.viewmodel.DyslexiaUiState,
     viewModel: DyslexiaViewModel
 ) {
+    val fieldShape = remember { RoundedCornerShape(12.dp) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -415,8 +419,8 @@ private fun TextInputView(
                 .weight(1f)
                 .fillMaxWidth()
                 .subtleNeonGlow(cornerRadius = 12.dp, glowRadius = 4.dp, intensity = 0.06f)
-                .border(BorderStroke(1.dp, HubColors.NeonGreenBorder), RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                .border(BorderStroke(1.dp, HubColors.NeonGreenBorder), fieldShape)
+                .background(Color.White.copy(alpha = 0.08f), fieldShape)
                 .padding(16.dp)
         ) {
             BasicTextField(
@@ -479,8 +483,9 @@ private fun TextReadingView(
     uiState: com.app.ttsreader.viewmodel.DyslexiaUiState,
     viewModel: DyslexiaViewModel
 ) {
-    val listState = rememberLazyListState()
-    val scope     = rememberCoroutineScope()
+    val listState   = rememberLazyListState()
+    val scope       = rememberCoroutineScope()
+    val wordBoxShape = remember { RoundedCornerShape(14.dp) }
 
     // Auto-scroll to current paragraph when it changes
     LaunchedEffect(uiState.activeParagraphIdx) {
@@ -492,10 +497,13 @@ private fun TextReadingView(
     Column(modifier = Modifier.fillMaxSize()) {
 
         // ── Spotlight word card ────────────────────────────────────────────────
-        val currentWord = uiState.paragraphs
-            .getOrNull(uiState.activeParagraphIdx)
-            ?.getOrNull(uiState.activeWordIdx)
-            ?: ""
+        // Memoized — only recomputed when paragraph/word index actually changes
+        val currentWord = remember(uiState.paragraphs, uiState.activeParagraphIdx, uiState.activeWordIdx) {
+            uiState.paragraphs
+                .getOrNull(uiState.activeParagraphIdx)
+                ?.getOrNull(uiState.activeWordIdx)
+                ?: ""
+        }
 
         Box(
             modifier = Modifier
@@ -505,9 +513,9 @@ private fun TextReadingView(
                 .subtleNeonGlow(cornerRadius = 14.dp, glowRadius = 12.dp, intensity = 0.20f)
                 .border(
                     BorderStroke(1.5.dp, HubColors.NeonGreenBorder),
-                    RoundedCornerShape(14.dp)
+                    wordBoxShape
                 )
-                .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(14.dp)),
+                .background(Color.White.copy(alpha = 0.10f), wordBoxShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -546,7 +554,8 @@ private fun TextReadingView(
                     )
                 } else {
                     // Inactive paragraph — dimmed + blurred
-                    DimmedParagraph(text = para.joinToString(" "))
+                    // Use pre-joined string from ViewModel to avoid per-recomposition allocation
+                    DimmedParagraph(text = uiState.joinedParagraphs.getOrElse(pIdx) { para.joinToString(" ") })
                 }
             }
         }
@@ -562,27 +571,31 @@ private fun ActiveParagraph(
     activeWord: Int,
     onWordTap: (Int) -> Unit
 ) {
-    val annotated = buildAnnotatedString {
-        words.forEachIndexed { idx, word ->
-            if (idx == activeWord) {
-                withStyle(
-                    SpanStyle(
-                        color      = HubColors.NeonGreen,
-                        fontSize   = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        background = HubColors.NeonGreenFaint
-                    )
-                ) { append(word) }
-            } else {
-                withStyle(
-                    SpanStyle(
-                        color      = Color.White.copy(alpha = 0.78f),
-                        fontSize   = 17.sp,
-                        fontWeight = FontWeight.Normal
-                    )
-                ) { append(word) }
+    val cardShape = remember { RoundedCornerShape(10.dp) }
+    // Memoized — AnnotatedString rebuild is O(words); skip when nothing changed
+    val annotated = remember(words, activeWord) {
+        buildAnnotatedString {
+            words.forEachIndexed { idx, word ->
+                if (idx == activeWord) {
+                    withStyle(
+                        SpanStyle(
+                            color      = HubColors.NeonGreen,
+                            fontSize   = 20.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            background = HubColors.NeonGreenFaint
+                        )
+                    ) { append(word) }
+                } else {
+                    withStyle(
+                        SpanStyle(
+                            color      = Color.White.copy(alpha = 0.78f),
+                            fontSize   = 17.sp,
+                            fontWeight = FontWeight.Normal
+                        )
+                    ) { append(word) }
+                }
+                if (idx < words.size - 1) append(" ")
             }
-            if (idx < words.size - 1) append(" ")
         }
     }
 
@@ -591,9 +604,9 @@ private fun ActiveParagraph(
             .fillMaxWidth()
             .border(
                 BorderStroke(1.dp, HubColors.NeonGreenBorder.copy(alpha = 0.40f)),
-                RoundedCornerShape(10.dp)
+                cardShape
             ),
-        shape          = RoundedCornerShape(10.dp),
+        shape          = cardShape,
         color          = Color.White.copy(alpha = 0.08f),
         tonalElevation = 0.dp
     ) {
@@ -608,13 +621,15 @@ private fun ActiveParagraph(
 @Composable
 private fun DimmedParagraph(text: String) {
     Text(
-        text     = text,
-        color    = Color.White.copy(alpha = 0.15f),
-        fontSize = 14.sp,
+        text       = text,
+        color      = Color.White.copy(alpha = 0.15f),
+        fontSize   = 14.sp,
         lineHeight = 20.sp,
-        modifier = Modifier
+        modifier   = Modifier
             .fillMaxWidth()
-            .blur(5.dp)
+            // blur() requires RenderEffect, only available on API 31+.
+            // On older devices the low alpha already creates sufficient visual separation.
+            .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(5.dp) else Modifier)
             .padding(horizontal = 4.dp)
     )
 }
@@ -702,11 +717,12 @@ private fun ControlButton(
 
 @Composable
 private fun ControlChip(label: String, onClick: () -> Unit) {
+    val chipShape = remember { RoundedCornerShape(8.dp) }
     Box(
         modifier = Modifier
             .size(32.dp)
-            .border(BorderStroke(1.dp, HubColors.NeonGreenBorder), RoundedCornerShape(8.dp))
-            .background(HubColors.NeonGreenFaint, RoundedCornerShape(8.dp))
+            .border(BorderStroke(1.dp, HubColors.NeonGreenBorder), chipShape)
+            .background(HubColors.NeonGreenFaint, chipShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

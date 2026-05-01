@@ -200,6 +200,8 @@ private fun ScanHistoryCard(
     val clipboardManager = LocalClipboardManager.current
     val haptic           = LocalHapticFeedback.current
     val dateFormat       = remember { SimpleDateFormat("MMM d · h:mm a", Locale.getDefault()) }
+    val cardShape        = remember { RoundedCornerShape(20.dp) }
+    val chipShape        = remember { RoundedCornerShape(8.dp) }
 
     // Staggered entry animation — same pattern as Hub tiles and Settings cards
     var show by remember { mutableStateOf(false) }
@@ -227,10 +229,10 @@ private fun ScanHistoryCard(
                 this.alpha             = cardAlpha
                 this.translationY      = cardSlide
             }
-            .background(GlassSurface, RoundedCornerShape(20.dp))
-            .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp)),
-        shape  = RoundedCornerShape(20.dp),
+            .background(GlassSurface, cardShape)
+            .border(1.dp, GlassBorder, cardShape)
+            .clip(cardShape),
+        shape  = cardShape,
         color  = Color.Transparent
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -244,7 +246,7 @@ private fun ScanHistoryCard(
                 // Language chip
                 Box(
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.10f), chipShape)
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(

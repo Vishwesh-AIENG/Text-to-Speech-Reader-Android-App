@@ -132,7 +132,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hypothesisId: String,
         location: String,
         message: String,
-        data: JSONObject = JSONObject()
+        data: () -> JSONObject = { JSONObject() }
     ) {
         // NOTE: We send logs to the local debug ingest server so they appear in the
         // workspace log file `debug-863fc4.log` (host machine).
@@ -154,10 +154,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .put("hypothesisId", hypothesisId)
                     .put("location", location)
                     .put("message", message)
-                    .put("data", data)
+                    .put("data", data())
                     .put("timestamp", System.currentTimeMillis())
 
-                val hosts = listOf("10.0.2.2", "10.0.3.2", "127.0.0.1")
+                val hosts = DBG_HOSTS
                 var sent = false
                 var lastError: String? = null
                 for (host in hosts) {
@@ -232,10 +232,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             hypothesisId = "A",
                             location = "MainViewModel.observeOcrResults:map",
                             message = "sanitizeOcrText applied to Success.fullText",
-                            data = JSONObject()
-                                .put("rawLen", result.fullText.length)
-                                .put("cleanLen", clean.length)
-                                .put("cleanBlank", clean.isBlank())
+                            data = {
+                                JSONObject()
+                                    .put("rawLen", result.fullText.length)
+                                    .put("cleanLen", clean.length)
+                                    .put("cleanBlank", clean.isBlank())
+                            }
                         )
                         if (clean.isBlank()) OcrResult.Empty
                         else result.copy(fullText = clean)
@@ -268,9 +270,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             hypothesisId = "C",
                             location = "MainViewModel.observeOcrResults:onEach",
                             message = "OCR Success applied to uiState.recognizedText",
-                            data = JSONObject()
-                                .put("recognizedLen", result.fullText.length)
-                                .put("textChanged", textChanged)
+                            data = {
+                                JSONObject()
+                                    .put("recognizedLen", result.fullText.length)
+                                    .put("textChanged", textChanged)
+                            }
                         )
                     }
                     is OcrResult.Empty -> {
@@ -283,8 +287,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             hypothesisId = "B",
                             location = "MainViewModel.observeOcrResults:onEach",
                             message = "OCR Empty cleared recognizedText/translatedText",
-                            data = JSONObject()
-                                .put("cleared", true)
+                            data = { JSONObject().put("cleared", true) }
                         )
                     }
                     is OcrResult.Error -> setError(AppError.OcrFailed(result.exception))
@@ -430,11 +433,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             hypothesisId = "A",
                             location = "MainViewModel.startTranslationPipeline:map",
                             message = "Mapped OCR result to translatable text (nullable)",
-                            data = JSONObject()
-                                .put("resultType", "Success")
-                                .put("rawLen", result.fullText.length)
-                                .put("outIsNull", clean == null)
-                                .put("outLen", clean?.length ?: 0)
+                            data = {
+                                JSONObject()
+                                    .put("resultType", "Success")
+                                    .put("rawLen", result.fullText.length)
+                                    .put("outIsNull", clean == null)
+                                    .put("outLen", clean?.length ?: 0)
+                            }
                         )
                         clean
                     }
@@ -443,7 +448,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             hypothesisId = "B",
                             location = "MainViewModel.startTranslationPipeline:map",
                             message = "Mapped non-Success OCR result to null reset",
-                            data = JSONObject().put("resultType", result::class.java.simpleName)
+                            data = { JSONObject().put("resultType", result::class.java.simpleName) }
                         )
                         null
                     }
@@ -460,8 +465,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     hypothesisId = "B",
                     location = "MainViewModel.startTranslationPipeline:distinct",
                     message = "Post-distinct emission",
-                    data = JSONObject()
-                        .put("len", mapped.length)
+                    data = { JSONObject().put("len", mapped.length) }
                 )
             }
             .debounce(800L)
@@ -489,14 +493,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             hypothesisId = "D",
             location = "MainViewModel.translateText:entry",
             message = "translateText called",
-            data = JSONObject().put("textLen", text.length)
+            data = { JSONObject().put("textLen", text.length) }
         )
         if (text.isBlank()) {
             dbgLog(
                 hypothesisId = "C",
                 location = "MainViewModel.translateText:early",
-                message = "translateText early-return: blank",
-                data = JSONObject()
+                message = "translateText early-return: blank"
             )
             return
         }
@@ -507,9 +510,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hypothesisId = "C",
                 location = "MainViewModel.translateText:early",
                 message = "translateText early-return: source==target",
-                data = JSONObject()
-                    .put("source", source.mlKitCode)
-                    .put("target", target.mlKitCode)
+                data = {
+                    JSONObject()
+                        .put("source", source.mlKitCode)
+                        .put("target", target.mlKitCode)
+                }
             )
             return
         }
@@ -526,8 +531,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hypothesisId = "D",
                 location = "MainViewModel.translateText:success",
                 message = "Translation succeeded; translatedText updated",
-                data = JSONObject()
-                    .put("translatedLen", translated.length)
+                data = { JSONObject().put("translatedLen", translated.length) }
             )
         }.onFailure { e ->
             if (e is CancellationException) throw e
@@ -536,9 +540,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hypothesisId = "D",
                 location = "MainViewModel.translateText:failure",
                 message = "Translation failed",
-                data = JSONObject()
-                    .put("exception", e::class.java.simpleName)
-                    .put("msg", (e.message ?: "").take(160))
+                data = {
+                    JSONObject()
+                        .put("exception", e::class.java.simpleName)
+                        .put("msg", (e.message ?: "").take(160))
+                }
             )
         }
     }
@@ -972,6 +978,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ocrRepository.clear()
         boundingBoxSmoother.clear()
         speechController.shutdown()
+    }
+
+    companion object {
+        /** Debug ingest hosts — allocated once, not per dbgLog call. */
+        private val DBG_HOSTS = listOf("10.0.2.2", "10.0.3.2", "127.0.0.1")
     }
 }
 

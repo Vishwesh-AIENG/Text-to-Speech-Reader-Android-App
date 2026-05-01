@@ -5,7 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -120,10 +121,6 @@ fun HubModeTile(
             )
         )
     }
-    val borderColor = Color.White.copy(
-        alpha = (0.14f + glowAlpha.value * 0.8f).coerceAtMost(0.50f)
-    )
-
     Box(
         modifier = modifier
             // Layer 1: entry animation + card scale (outer-most transform)
@@ -149,7 +146,18 @@ fun HubModeTile(
             // Layer 3: clip + glass fill + border + touch
             .clip(shape)
             .background(brush = cardBg, shape = shape)
-            .border(BorderStroke(1.dp, borderColor), shape)
+            // Border colour read in draw scope — glowAlpha changes only trigger
+            // a redraw, not a recomposition of the full tile.
+            .drawWithContent {
+                drawContent()
+                drawRoundRect(
+                    color        = Color.White.copy(
+                        alpha = (0.14f + glowAlpha.value * 0.8f).coerceAtMost(0.50f)
+                    ),
+                    style        = Stroke(width = 1.dp.toPx()),
+                    cornerRadius = CornerRadius(20.dp.toPx())
+                )
+            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {

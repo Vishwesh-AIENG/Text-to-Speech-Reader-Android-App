@@ -1,10 +1,7 @@
 package com.app.ttsreader.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -42,10 +39,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +60,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.app.ttsreader.R
+
+// ── Module-level constants — allocated once, never re-created per recomposition ─
+private val SPEED_OPTIONS  = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+private val SLEEP_DURATIONS = listOf(0, 15, 30, 60)
+
+/** Stateless format lambda — safe to hoist; captures nothing. */
+private val formatMultiplier: (Float) -> String = { String.format("%.2fx", it) }
 
 /**
  * Premium playback control bar.
@@ -102,17 +108,20 @@ fun ControlBar(
     val haptic = LocalHapticFeedback.current
     var showSpeedSheet by remember { mutableStateOf(false) }
 
-    // Pulsing ring — unconditional per Compose rules
-    val infiniteTransition = rememberInfiniteTransition(label = "speakPulse")
-    val pulseProgress by infiniteTransition.animateFloat(
-        initialValue  = 0f,
-        targetValue   = 1f,
-        animationSpec = infiniteRepeatable(
-            animation  = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulseProgress"
-    )
+    // Pulsing ring — driven by Animatable so the coroutine only runs while speaking.
+    // When isSpeaking flips false the loop exits immediately, saving ~60 draw
+    // invalidations per second that the old InfiniteTransition would have produced.
+    val pulseProgress = remember { Animatable(0f) }
+    LaunchedEffect(isSpeaking) {
+        if (isSpeaking) {
+            while (isActive) {
+                pulseProgress.animateTo(1f, tween(900, easing = LinearEasing))
+                pulseProgress.snapTo(0f)
+            }
+        } else {
+            pulseProgress.snapTo(0f)
+        }
+    }
 
     // Glass accent
     val accentCyan       = Color(0xFF66FFD1)
@@ -180,12 +189,13 @@ fun ControlBar(
                     .then(
                         if (isSpeaking) {
                             Modifier.drawBehind {
+                                val p      = pulseProgress.value   // draw-scope read only
                                 val base   = 28.dp.toPx()
                                 val expand = 24.dp.toPx()
                                 drawCircle(
                                     color  = accentCyan,
-                                    radius = base + pulseProgress * expand,
-                                    alpha  = (1f - pulseProgress) * 0.40f
+                                    radius = base + p * expand,
+                                    alpha  = (1f - p) * 0.40f
                                 )
                             }
                         } else Modifier
@@ -285,7 +295,7 @@ private fun SpeedPitchSheet(
             value    = speechRate,
             onChange = onSpeedChange,
             range    = 0.5f..2.0f,
-            format   = { String.format("%.2fx", it) }
+            format   = formatMultiplier
         )
 
         Spacer(Modifier.height(8.dp))
@@ -295,7 +305,7 @@ private fun SpeedPitchSheet(
             value    = pitch,
             onChange = onPitchChange,
             range    = 0.5f..2.0f,
-            format   = { String.format("%.2fx", it) }
+            format   = formatMultiplier
         )
 
         Spacer(Modifier.height(24.dp))
@@ -343,12 +353,13 @@ private fun SpeedChip(
     onSpeedChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val speeds    = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+    val speeds    = SPEED_OPTIONS
     val clamped   = speechRate.coerceIn(0.5f, 2.0f)
     val idx       = speeds.indexOfFirst { kotlin.math.abs(it - clamped) < 0.01f }.takeIf { it >= 0 } ?: 2
     val nextSpeed = speeds[(idx + 1) % speeds.size]
 
     val speedDesc = remember(speechRate) { String.format("Speed %.1fx. Tap to change.", speechRate) }
+    val speedText = remember(speechRate) { String.format("%.1fx", speechRate) }
     Surface(
         onClick      = { onSpeedChange(nextSpeed) },
         modifier     = modifier
@@ -360,7 +371,7 @@ private fun SpeedChip(
         contentColor = Color(0xFF66FFD1)
     ) {
         Text(
-            text       = String.format(stringResource(R.string.control_speed_label), speechRate),
+            text       = speedText,
             style      = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
             fontWeight = FontWeight.SemiBold,
             textAlign  = TextAlign.Center,
@@ -376,7 +387,7 @@ private fun SleepTimerChip(
     onTimerChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val durations    = listOf(0, 15, 30, 60)
+    val durations    = SLEEP_DURATIONS
     val currentIdx   = durations.indexOf(timerMinutes).takeIf { it >= 0 } ?: 0
     val nextDuration = durations[(currentIdx + 1) % durations.size]
     val isActive     = timerMinutes > 0
@@ -406,11 +417,13 @@ private fun SleepTimerChip(
         else
             Color.White.copy(alpha = 0.50f)
     ) {
-        val displayText = if (isActive) {
-            val m = remainingSeconds / 60
-            val s = remainingSeconds % 60
-            String.format("%d:%02d", m, s)
-        } else "∞"
+        val displayText = remember(isActive, remainingSeconds) {
+            if (isActive) {
+                val m = remainingSeconds / 60
+                val s = remainingSeconds % 60
+                String.format("%d:%02d", m, s)
+            } else "∞"
+        }
 
         Text(
             text       = displayText,

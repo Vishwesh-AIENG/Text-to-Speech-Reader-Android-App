@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -14,20 +13,34 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+// Constant colour stops — allocated once at class-load time, never re-created
+private val SHIMMER_COLORS = listOf(
+    Color(0xFFE0E0E0),
+    Color(0xFFF5F5F5),
+    Color(0xFFE0E0E0)
+)
+
 /**
  * Skeleton shimmer placeholder that mimics text lines while content is loading.
  *
- * Uses an [rememberInfiniteTransition] to sweep a highlight gradient across
+ * Uses a [rememberInfiniteTransition] to sweep a highlight gradient across
  * rounded placeholder bars — the standard "loading" pattern in premium apps.
+ *
+ * ### Performance notes
+ * The animated [translateX] value is kept as a [androidx.compose.runtime.State]
+ * reference and read only inside [drawWithCache]'s [onDrawBehind] block.
+ * This means changes to the animation trigger a **redraw**, not a recomposition,
+ * and avoids the per-frame [Brush] allocation that the previous
+ * `remember(translateX) { Brush.linearGradient(…) }` pattern incurred.
  *
  * @param lineCount   Number of skeleton lines to show.
  * @param lineHeight  Height of each placeholder bar.
@@ -41,27 +54,16 @@ fun ShimmerEffect(
     lineSpacing: Dp = 8.dp
 ) {
     val transition = rememberInfiniteTransition(label = "shimmer")
-    val translateX by transition.animateFloat(
-        initialValue = -300f,
-        targetValue = 600f,
+    // State reference — value read only in draw scope to avoid per-frame recompositions
+    val translateXState = transition.animateFloat(
+        initialValue  = -300f,
+        targetValue   = 600f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            animation  = tween(durationMillis = 1200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "shimmerX"
     )
-
-    val shimmerBrush = remember(translateX) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color(0xFFE0E0E0),
-                Color(0xFFF5F5F5),
-                Color(0xFFE0E0E0)
-            ),
-            start = Offset(translateX, 0f),
-            end = Offset(translateX + 300f, 0f)
-        )
-    }
 
     Column(modifier = modifier) {
         repeat(lineCount) { index ->
@@ -69,7 +71,20 @@ fun ShimmerEffect(
                 modifier = Modifier
                     .fillMaxWidth(if (index == lineCount - 1) 0.6f else 1f)
                     .height(lineHeight)
-                    .background(shimmerBrush, RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(4.dp))
+                    .drawWithCache {
+                        onDrawBehind {
+                            // translateXState.value read in draw scope — redraw only
+                            val x = translateXState.value
+                            drawRect(
+                                brush = Brush.linearGradient(
+                                    colors = SHIMMER_COLORS,
+                                    start  = Offset(x, 0f),
+                                    end    = Offset(x + 300f, 0f)
+                                )
+                            )
+                        }
+                    }
             )
             if (index < lineCount - 1) {
                 Spacer(Modifier.height(lineSpacing))

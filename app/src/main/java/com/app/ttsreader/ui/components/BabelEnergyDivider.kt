@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -83,20 +84,22 @@ fun BabelEnergyDivider(
     // Drawing constants
     val steps = 200   // path resolution — higher = smoother curve
 
+    // Pre-allocate once; reset + rebuild inside the draw block each frame.
+    val path = remember { Path() }
+
     Canvas(modifier = modifier) {
         val w       = size.width
         val centerY = size.height / 2f
 
-        // Build the sine-wave path once, reused for all glow layers
-        val path = Path().also { p ->
-            for (i in 0..steps) {
-                val x = w * i / steps
-                // Superimpose two sine waves at different frequencies for a complex waveform
-                val y = centerY +
-                        amplitude * sin(phase  + x / w * 2f * PI.toFloat()) +
-                        (amplitude * 0.35f) * sin(phase2 + x / w * 4f * PI.toFloat())
-                if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
-            }
+        // Rebuild the sine-wave path into the pre-allocated object — no GC pressure
+        path.reset()
+        for (i in 0..steps) {
+            val x = w * i / steps
+            // Superimpose two sine waves at different frequencies for a complex waveform
+            val y = centerY +
+                    amplitude * sin(phase  + x / w * 2f * PI.toFloat()) +
+                    (amplitude * 0.35f) * sin(phase2 + x / w * 4f * PI.toFloat())
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
 
         // ── Layer 1 — wide outer glow (most transparent) ──────────────────────
