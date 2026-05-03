@@ -1,6 +1,7 @@
 <div align="center">
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:1a6b96,50:2d9cdb,100:0a1e30&height=200&section=header&text=OmniLingo&fontSize=72&fontColor=ffffff&fontAlignY=38&desc=Your%20All-in-One%20Assistive%20Language%20Companion&descAlignY=58&descSize=18&animation=fadeIn" width="100%"/>
+> 🌐 **[See it in action →](https://vishwesh-aieng.github.io/Text-to-Speech-Reader-Android-App/)** — interactive demo, no install needed.
 
 <br/>
 
@@ -17,12 +18,12 @@
 [![Gemma On-Device](https://img.shields.io/badge/Gemma-On--Device_AI-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android)
 [![Room](https://img.shields.io/badge/Room_DB-FF5722?style=flat-square&logo=sqlite&logoColor=white)](https://developer.android.com/training/data-storage/room)
 [![Material3](https://img.shields.io/badge/Material_3-757575?style=flat-square&logo=material-design&logoColor=white)](https://m3.material.io)
-
+[![Live Site](https://img.shields.io/badge/Live%20Site-Visit%20Now-2d9cdb?style=for-the-badge&logo=github)](https://vishwesh-aieng.github.io/Text-to-Speech-Reader-Android-App/)
 <br/><br/>
 
 > **OmniLingo** is a premium assistive Android app that turns your camera into a universal language engine —  
 > read, translate, speak, and understand text in real time, in any language, anywhere.
-
+> 
 <br/>
 
 </div>
