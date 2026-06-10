@@ -313,6 +313,79 @@ keyPassword=your_key_password
 
 ---
 
+## 🔐 Privacy Policy
+
+<a id="privacy"></a>
+
+**Effective date:** 10 June 2026
+**App:** OmniLingo (package `com.app.omnilingo`)
+**Developer contact:** vishweshadla6@gmail.com
+
+The short version: **OmniLingo does not collect, transmit, sell, or share any personal data.** Everything you scan, translate, read, or hear stays on your device.
+
+### What data the App accesses
+
+| Data type | When | Where it goes |
+|---|---|---|
+| **Camera frames** | When you open AR Magic Lens, Classic TTS, Dyslexia Focus, or Instant Indexing | Processed in real time on your device by on-device OCR. Frames are never saved, uploaded, or shared. |
+| **Files you choose** (PDF, DOCX, DOC, TXT) | When you import a document into the E-Reader | Copied to the App's private storage on your device. Never uploaded or shared. |
+| **Microphone audio** | When you start the Babel Conversation Engine | Streamed to Android's system speech recognizer, which on most devices is provided by Google. See Google's privacy policy for how Google handles voice input. The App itself does not save or upload audio. |
+| **Translation text** | When the App translates a word, line, or document | Sent to the on-device Google ML Kit translation model (which runs locally after the language model is downloaded — see "Third-party services" below). |
+| **AR translation history** | When AR Magic Lens successfully translates text | Stored locally on your device in the App's private database, so you can revisit and favorite past translations. You can delete entries or clear the entire history from inside the App. |
+| **App settings** (theme, languages, voice rate, pitch) | When you change them | Stored locally on your device. |
+
+The App does **not** access: contacts, calendar, SMS, call logs, accounts, location, browsing history, installed apps, or device identifiers (advertising ID, IMEI).
+
+### What data the App collects
+
+**None.** The App has no analytics SDK, no crash reporting, no telemetry, no ads, no user accounts, and no server. It does not transmit your usage, your scans, your translations, your documents, or any identifier to the developer or to any third party.
+
+### Third-party services
+
+OmniLingo uses on-device libraries from Google that may, on first use, download model files from Google's servers:
+
+- **Google ML Kit (Text Recognition + Translation)** — downloads the translation model for each language pair you select, once. After download, all translation runs entirely on-device.
+- **Google MediaPipe (Gemma)** — downloads the Gemma summarization model, once. Used only when you ask the App to summarize text.
+
+These downloads are made by Google's libraries; the App does not send your scanned text, documents, or any personal data along with them. Google's privacy policy governs the download itself: <https://policies.google.com/privacy>
+
+No other third-party services are used.
+
+### Permissions the App requests, and why
+
+- **`CAMERA`** — required for OCR and AR translation. Frames are processed and immediately discarded.
+- **`RECORD_AUDIO`** — required for the Babel Conversation Engine's speech recognition.
+- **`INTERNET`** — used only to download the one-time ML Kit and Gemma model files from Google. The App makes no other network requests.
+- **`READ_MEDIA_*` / Storage Access Framework** — required when you choose to import a document into the E-Reader. The App reads only the file you explicitly select.
+
+You can deny or revoke any permission at any time from Android Settings; the corresponding feature will be unavailable but the rest of the App will continue to work.
+
+### Children's privacy
+
+OmniLingo is not directed at children under 13. The App does not knowingly collect personal data from children. Because the App collects no personal data from anyone, no special data is collected from children either. If you are a parent or guardian and believe a child has used the App in a way that concerns you, you can clear all on-device data by uninstalling the App.
+
+### Data security
+
+All data the App handles stays on your device, inside the App's private storage area (protected by the Android sandbox). The App does not transmit data to the developer's servers; there are no developer servers.
+
+### Your choices and rights
+
+Because no data leaves your device, there is no remote copy to access, export, or delete. To remove all App data:
+
+- Delete individual AR history entries from inside the App (AR Magic Lens → History → swipe to delete, or "Clear" to remove all non-favorites).
+- Open Android **Settings → Apps → OmniLingo → Storage → Clear data**.
+- Or uninstall the App.
+
+### Changes to this policy
+
+If material changes are made to this policy, the updated version will be posted in this README and the "Effective date" above will change. Continued use of the App after the new policy takes effect constitutes acceptance.
+
+### Contact
+
+Questions or concerns about this policy can be sent to: **vishweshadla6@gmail.com**
+
+---
+
 ## 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome!
