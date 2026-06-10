@@ -106,7 +106,7 @@ function TopBar(){
         <a href="#modes">Modes</a>
         <a href="#tech">Tech</a>
         <a href="#languages">Languages</a>
-        <a href="#privacy">Privacy</a>
+        <a href="#privacy-policy">Privacy Policy</a>
       </nav>
       <a href="https://github.com/Vishwesh-AIENG/Text-to-Speech-Reader-Android-App" target="_blank" rel="noopener noreferrer" className="cta">⌥ view source ↗</a>
     </header>
@@ -1188,6 +1188,191 @@ function PrivacyCTA(){
 }
 
 // ------------------------------------------------------------
+// Privacy Policy (full legal section)
+// ------------------------------------------------------------
+function PrivacyPolicy(){
+  const [open, setOpen] = useState(false);
+
+  const accessRows = [
+    ['Camera frames', 'When you open AR Magic Lens, Classic TTS, Dyslexia Focus, or Instant Indexing', 'Processed in real time on your device by on-device OCR. Frames are never saved, uploaded, or shared.'],
+    ['Files you choose (PDF, DOCX, DOC, TXT)', 'When you import a document into the E-Reader', "Copied to the App's private storage on your device. Never uploaded or shared."],
+    ['Microphone audio', 'When you start the Babel Conversation Engine', "Streamed to Android's system speech recognizer (provided by Google on most devices). The App itself does not save or upload audio."],
+    ['Translation text', 'When the App translates a word, line, or document', 'Sent to the on-device Google ML Kit translation model, which runs locally after the language model is downloaded.'],
+    ['AR translation history', 'When AR Magic Lens successfully translates text', "Stored locally in the App's private database so you can revisit and favorite past translations. Deletable any time."],
+    ['App settings (theme, languages, voice rate, pitch)', 'When you change them', 'Stored locally on your device.'],
+  ];
+
+  const labelStyle = {fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'.18em', color:'#7cf5d4', textTransform:'uppercase', margin:'0 0 14px'};
+  const bodyStyle = {color:'#a6c3d2', fontSize:15, lineHeight:1.65, margin:'0 0 14px', maxWidth:760};
+  const blockStyle = {marginBottom:34};
+
+  return (
+    <section className="pad" id="privacy-policy">
+      <div className="kicker">PRIVACY POLICY</div>
+      <h2 className="section-h">Your data <em>never</em> leaves the phone.</h2>
+
+      {/* short version highlight */}
+      <div style={{
+        marginTop:28, padding:'26px 30px', borderRadius:20, maxWidth:820,
+        background:'linear-gradient(135deg, rgba(124,245,212,.10), rgba(45,156,219,.05))',
+        border:'1px solid rgba(124,245,212,.3)', backdropFilter:'blur(12px)'
+      }}>
+        <div style={{display:'flex', flexWrap:'wrap', gap:'4px 22px', fontFamily:'JetBrains Mono', fontSize:11, color:'#6aa2b5', letterSpacing:'.08em', marginBottom:14}}>
+          <span>EFFECTIVE 10 JUN 2026</span>
+          <span>com.app.omnilingo</span>
+          <a href="mailto:vishweshadla6@gmail.com" style={{color:'#9ef0ff', textDecoration:'none'}}>vishweshadla6@gmail.com</a>
+        </div>
+        <p style={{margin:0, fontSize:17, lineHeight:1.6, color:'#eaf4f8'}}>
+          <strong style={{color:'#7cf5d4'}}>The short version:</strong> OmniLingo does not collect,
+          transmit, sell, or share any personal data. Everything you scan, translate, read, or hear
+          stays on your device.
+        </p>
+      </div>
+
+      <button
+        onClick={()=>setOpen(o=>!o)}
+        style={{
+          marginTop:24, padding:'12px 24px', borderRadius:999, cursor:'pointer',
+          background: open ? 'rgba(143,185,204,.08)' : 'linear-gradient(135deg,#2d9cdb,#5fd7ff)',
+          color: open ? '#9ef0ff' : '#051320', fontWeight:600, border: open ? '1px solid rgba(143,185,204,.25)' : 0,
+          fontFamily:'JetBrains Mono', fontSize:13, letterSpacing:'.04em',
+          transition:'all .2s'
+        }}
+      >{open ? '✕ Collapse full policy' : 'Read the full privacy policy ↓'}</button>
+
+      {open && (
+        <div style={{marginTop:46, maxWidth:880}}>
+          {/* What data the App accesses */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>What data the App accesses</h3>
+            <div style={{
+              borderRadius:18, overflow:'hidden',
+              border:'1px solid rgba(143,185,204,.14)',
+              background:'linear-gradient(160deg, rgba(10,30,48,.5), rgba(5,17,28,.3))',
+              backdropFilter:'blur(14px)'
+            }}>
+              {accessRows.map((r,i)=>(
+                <div key={i} className="pp-row" style={{
+                  display:'grid', gridTemplateColumns:'minmax(150px,1fr) 1.2fr 1.6fr', gap:20,
+                  padding:'18px 24px',
+                  borderBottom: i<accessRows.length-1 ? '1px solid rgba(143,185,204,.08)' : 'none',
+                  alignItems:'start'
+                }}>
+                  <div style={{fontSize:14, color:'#eaf4f8', fontWeight:500}}>{r[0]}</div>
+                  <div className="pp-when" style={{fontSize:13, color:'#95b4c3', lineHeight:1.5}}>{r[1]}</div>
+                  <div style={{fontSize:13, color:'#a6c3d2', lineHeight:1.5}}>{r[2]}</div>
+                </div>
+              ))}
+            </div>
+            <p style={{...bodyStyle, marginTop:16}}>
+              The App does <strong style={{color:'#cde4ee'}}>not</strong> access: contacts, calendar, SMS,
+              call logs, accounts, location, browsing history, installed apps, or device identifiers
+              (advertising ID, IMEI).
+            </p>
+          </div>
+
+          {/* What data the App collects */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>What data the App collects</h3>
+            <p style={bodyStyle}>
+              <strong style={{color:'#7cf5d4'}}>None.</strong> The App has no analytics SDK, no crash
+              reporting, no telemetry, no ads, no user accounts, and no server. It does not transmit your
+              usage, scans, translations, documents, or any identifier to the developer or any third party.
+            </p>
+          </div>
+
+          {/* Third-party services */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>Third-party services</h3>
+            <p style={bodyStyle}>
+              OmniLingo uses on-device libraries from Google that may, on first use, download model files
+              from Google's servers:
+            </p>
+            <ul style={{...bodyStyle, paddingLeft:22}}>
+              <li style={{marginBottom:8}}><strong style={{color:'#cde4ee'}}>Google ML Kit (Text Recognition + Translation)</strong> — downloads the translation model for each language pair you select, once. After download, all translation runs entirely on-device.</li>
+              <li><strong style={{color:'#cde4ee'}}>Google MediaPipe (Gemma)</strong> — downloads the Gemma summarization model, once. Used only when you ask the App to summarize text.</li>
+            </ul>
+            <p style={bodyStyle}>
+              These downloads are made by Google's libraries; the App does not send your scanned text,
+              documents, or any personal data along with them. Google's privacy policy governs the download
+              itself: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style={{color:'#9ef0ff'}}>policies.google.com/privacy</a>. No other third-party services are used.
+            </p>
+          </div>
+
+          {/* Permissions */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>Permissions the App requests, and why</h3>
+            <ul style={{...bodyStyle, paddingLeft:22}}>
+              <li style={{marginBottom:8}}><code style={{color:'#7cf5d4', fontFamily:'JetBrains Mono', fontSize:13}}>CAMERA</code> — required for OCR and AR translation. Frames are processed and immediately discarded.</li>
+              <li style={{marginBottom:8}}><code style={{color:'#7cf5d4', fontFamily:'JetBrains Mono', fontSize:13}}>RECORD_AUDIO</code> — required for the Babel Conversation Engine's speech recognition.</li>
+              <li style={{marginBottom:8}}><code style={{color:'#7cf5d4', fontFamily:'JetBrains Mono', fontSize:13}}>INTERNET</code> — used only to download the one-time ML Kit and Gemma model files from Google. No other network requests.</li>
+              <li><code style={{color:'#7cf5d4', fontFamily:'JetBrains Mono', fontSize:13}}>READ_MEDIA_* / SAF</code> — required when you import a document into the E-Reader. The App reads only the file you explicitly select.</li>
+            </ul>
+            <p style={bodyStyle}>
+              You can deny or revoke any permission at any time from Android Settings; the corresponding
+              feature will be unavailable but the rest of the App will continue to work.
+            </p>
+          </div>
+
+          {/* Children's privacy */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>Children's privacy</h3>
+            <p style={bodyStyle}>
+              OmniLingo is not directed at children under 13 and does not knowingly collect personal data
+              from children. Because the App collects no personal data from anyone, no special data is
+              collected from children either. To remove all on-device data, simply uninstall the App.
+            </p>
+          </div>
+
+          {/* Data security */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>Data security</h3>
+            <p style={bodyStyle}>
+              All data the App handles stays on your device, inside the App's private storage area
+              (protected by the Android sandbox). The App does not transmit data to the developer's
+              servers — there are no developer servers.
+            </p>
+          </div>
+
+          {/* Your choices */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>Your choices and rights</h3>
+            <p style={bodyStyle}>
+              Because no data leaves your device, there is no remote copy to access, export, or delete.
+              To remove all App data:
+            </p>
+            <ul style={{...bodyStyle, paddingLeft:22}}>
+              <li style={{marginBottom:8}}>Delete AR history entries from inside the App (AR Magic Lens → History → swipe to delete, or "Clear" to remove all non-favorites).</li>
+              <li style={{marginBottom:8}}>Open Android <strong style={{color:'#cde4ee'}}>Settings → Apps → OmniLingo → Storage → Clear data</strong>.</li>
+              <li>Or uninstall the App.</li>
+            </ul>
+          </div>
+
+          {/* Changes */}
+          <div style={blockStyle}>
+            <h3 style={labelStyle}>Changes to this policy</h3>
+            <p style={bodyStyle}>
+              If material changes are made to this policy, the updated version will be posted in the
+              project README and the effective date above will change. Continued use of the App after the
+              new policy takes effect constitutes acceptance.
+            </p>
+          </div>
+
+          {/* Contact */}
+          <div style={{marginBottom:0}}>
+            <h3 style={labelStyle}>Contact</h3>
+            <p style={bodyStyle}>
+              Questions or concerns about this policy can be sent to{' '}
+              <a href="mailto:vishweshadla6@gmail.com" style={{color:'#9ef0ff'}}>vishweshadla6@gmail.com</a>.
+            </p>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ------------------------------------------------------------
 // Footer
 // ------------------------------------------------------------
 function Footer(){
@@ -1266,6 +1451,7 @@ function App(){
       <GlyphCallout/>
       <Tech/>
       <PrivacyCTA/>
+      <PrivacyPolicy/>
       <Footer/>
     </SpeakProvider>
   );
