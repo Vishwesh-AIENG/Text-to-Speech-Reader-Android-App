@@ -8,14 +8,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ScanRecord::class, BookEntity::class],
-    version = 2,
+    entities = [ScanRecord::class, BookEntity::class, ArHistoryEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun scanDao(): ScanDao
     abstract fun bookDao(): BookDao
+    abstract fun arHistoryDao(): ArHistoryDao
 
     companion object {
         @Volatile
@@ -39,6 +40,32 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `ar_history` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `sourceText` TEXT NOT NULL,
+                        `translatedText` TEXT NOT NULL,
+                        `sourceLang` TEXT NOT NULL,
+                        `targetLang` TEXT NOT NULL,
+                        `isFavorite` INTEGER NOT NULL DEFAULT 0,
+                        `seenAtMs` INTEGER NOT NULL,
+                        `lastSeenAtMs` INTEGER NOT NULL,
+                        `seenCount` INTEGER NOT NULL DEFAULT 1
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS `index_ar_history_sourceText_sourceLang_targetLang`
+                    ON `ar_history` (`sourceText`, `sourceLang`, `targetLang`)
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -46,7 +73,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tts_reader_db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

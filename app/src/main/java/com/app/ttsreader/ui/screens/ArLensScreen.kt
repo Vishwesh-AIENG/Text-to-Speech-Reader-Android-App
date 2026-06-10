@@ -33,6 +33,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -65,9 +67,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.app.ttsreader.R
+import com.app.ttsreader.ar.FocusReticle
 import com.app.ttsreader.domain.model.AppLanguage
 import com.app.ttsreader.viewmodel.SettingsViewModel
-import com.app.ttsreader.ui.components.ArLensOverlay
 import com.app.ttsreader.ui.components.CameraHintBanner
 import com.app.ttsreader.ui.components.ClassicArLensOverlay
 import com.app.ttsreader.ui.components.CameraPreview
@@ -93,6 +95,7 @@ import com.app.ttsreader.viewmodel.ArLensViewModel
 fun ArLensScreen(
     onNavigateBack: () -> Unit,
     onOpenLanguages: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
     viewModel: ArLensViewModel = viewModel(),
     settingsViewModel: SettingsViewModel = viewModel()
 ) {
@@ -126,33 +129,42 @@ fun ArLensScreen(
                 }
             )
 
-            // ── AR overlay — Classic (Canvas) or Beta (SDF/OpenGL) ───────────
-            if (settingsState.useSdfOverlay) {
-                ArLensOverlay(
-                    blocks      = uiState.blocks,
-                    imageWidth  = uiState.imageEffectiveWidth,
-                    imageHeight = uiState.imageEffectiveHeight,
-                    modifier    = Modifier.fillMaxSize()
-                )
-            } else {
-                ClassicArLensOverlay(
-                    blocks      = uiState.blocks,
-                    imageWidth  = uiState.imageEffectiveWidth,
-                    imageHeight = uiState.imageEffectiveHeight,
-                    modifier    = Modifier.fillMaxSize()
-                )
-            }
+            // ── AR overlay — single canonical renderer ────────────────────────
+            ClassicArLensOverlay(
+                blocks        = uiState.blocks,
+                imageWidth    = uiState.imageEffectiveWidth,
+                imageHeight   = uiState.imageEffectiveHeight,
+                isFrontCamera = uiState.isFrontCamera,
+                onTapBlock    = { block -> viewModel.speakBlock(block) },
+                modifier      = Modifier.fillMaxSize()
+            )
+
+            // ── Animated focus reticle — corner brackets enclosing stable text
+            val stableBoxes = uiState.blocks.filter { it.displayAlpha > 0.5f }
+            val active = stableBoxes.isNotEmpty() && uiState.imageEffectiveWidth > 0
+            // Compute the union of stable boxes in image-space → screen-space
+            val (rL, rT, rR, rB) = computeReticleTarget(
+                blocks = stableBoxes,
+                imgW   = uiState.imageEffectiveWidth,
+                imgH   = uiState.imageEffectiveHeight,
+                isFront = uiState.isFrontCamera,
+            )
+            FocusReticle(
+                active = active,
+                targetLeft = rL, targetTop = rT,
+                targetRight = rR, targetBottom = rB,
+                modifier = Modifier.fillMaxSize()
+            )
 
             // ── Top controls strip ────────────────────────────────────────────
             ArTopBar(
-                sourceLangName  = uiState.sourceLang.displayName,
-                targetLangName  = uiState.targetLang.displayName,
-                useSdf          = settingsState.useSdfOverlay,
-                onBack          = onNavigateBack,
-                onPickSource    = { viewModel.openSourcePicker() },
-                onPickTarget    = { viewModel.openTargetPicker() },
-                onToggleOverlay = { settingsViewModel.toggleSdfOverlay() },
-                modifier        = Modifier
+                sourceLangName = uiState.sourceLang.displayName,
+                targetLangName = uiState.targetLang.displayName,
+                onBack         = onNavigateBack,
+                onPickSource   = { viewModel.openSourcePicker() },
+                onPickTarget   = { viewModel.openTargetPicker() },
+                onOpenHistory  = onOpenHistory,
+                modifier       = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
             )
@@ -171,6 +183,22 @@ fun ArLensScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                )
+            }
+
+            // ── Translation model not downloaded — persistent banner ─────────
+            val missingCode = uiState.missingModelLang
+            if (missingCode != null && notDownloadedLang == null && !uiState.isOffline) {
+                val missingName = remember(missingCode) {
+                    LanguageUtils.findByCode(missingCode)?.displayName ?: missingCode
+                }
+                ArMissingModelBanner(
+                    languageName = missingName,
+                    onOpenLanguages = onOpenLanguages,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 56.dp)
                 )
             }
 
@@ -261,14 +289,13 @@ fun ArLensScreen(
 
 @Composable
 private fun ArTopBar(
-    sourceLangName:  String,
-    targetLangName:  String,
-    useSdf:          Boolean,
-    onBack:          () -> Unit,
-    onPickSource:    () -> Unit,
-    onPickTarget:    () -> Unit,
-    onToggleOverlay: () -> Unit,
-    modifier:        Modifier = Modifier
+    sourceLangName: String,
+    targetLangName: String,
+    onBack:         () -> Unit,
+    onPickSource:   () -> Unit,
+    onPickTarget:   () -> Unit,
+    onOpenHistory:  () -> Unit,
+    modifier:       Modifier = Modifier
 ) {
     // Pulsing glow on the bottom border of the top bar
     val transition = rememberInfiniteTransition(label = "topBarGlow")
@@ -338,8 +365,8 @@ private fun ArTopBar(
 
             Spacer(Modifier.width(8.dp))
 
-            // Title column + tappable overlay-mode badge
-            ArTitleBadge(useSdf = useSdf, onToggle = onToggleOverlay)
+            // Title + history button
+            ArTitleAndHistory(onOpenHistory = onOpenHistory)
         }
 
         // Glowing neon bottom border
@@ -400,21 +427,10 @@ private fun ArLangChip(
     }
 }
 
-// ── Title + BETA badge ─────────────────────────────────────────────────────────
+// ── Title + history button ─────────────────────────────────────────────────────
 
 @Composable
-private fun ArTitleBadge(useSdf: Boolean, onToggle: () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "badgePulse")
-    val badgeAlpha by transition.animateFloat(
-        initialValue  = 0.60f,
-        targetValue   = 1.00f,
-        animationSpec = infiniteRepeatable(
-            animation  = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "badgeAlpha"
-    )
-
+private fun ArTitleAndHistory(onOpenHistory: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -427,30 +443,114 @@ private fun ArTitleBadge(useSdf: Boolean, onToggle: () -> Unit) {
             letterSpacing = 2.5.sp,
             textAlign     = TextAlign.Center
         )
-        // Tappable mode badge — CLASSIC (default) or SDF (beta)
+        // History button — opens AR translation log
         Box(
             modifier = Modifier
-                .subtleNeonGlow(cornerRadius = 3.dp, glowRadius = 4.dp, intensity = 0.20f)
-                .clip(RoundedCornerShape(3.dp))
+                .size(28.dp)
+                .subtleNeonGlow(cornerRadius = 14.dp, glowRadius = 4.dp, intensity = 0.16f)
+                .clip(CircleShape)
                 .background(HubColors.NeonGreenFaint)
-                .border(
-                    1.dp,
-                    HubColors.NeonGreen.copy(alpha = if (useSdf) badgeAlpha * 0.70f else 0.40f),
-                    RoundedCornerShape(3.dp)
-                )
-                .clickable { onToggle() }
-                .padding(horizontal = 5.dp, vertical = 1.dp),
+                .border(1.dp, HubColors.NeonGreen.copy(alpha = 0.55f), CircleShape)
+                .clickable { onOpenHistory() },
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text          = if (useSdf) stringResource(R.string.badge_beta) else "CLASSIC",
-                color         = HubColors.NeonGreen.copy(alpha = if (useSdf) badgeAlpha else 0.70f),
-                fontSize      = 7.sp,
-                fontWeight    = FontWeight.ExtraBold,
-                letterSpacing = 1.5.sp
+            Icon(
+                imageVector        = Icons.Default.History,
+                contentDescription = "AR translation history",
+                tint               = HubColors.NeonGreen,
+                modifier           = Modifier.size(14.dp)
             )
         }
     }
+}
+
+// ── Missing-model banner ───────────────────────────────────────────────────────
+
+@Composable
+private fun ArMissingModelBanner(
+    languageName: String,
+    onOpenLanguages: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier      = modifier,
+        shape         = RoundedCornerShape(12.dp),
+        color         = HubColors.Black.copy(alpha = 0.92f),
+        border        = BorderStroke(1.dp, HubColors.NeonGreenBorder),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier            = Modifier.padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment   = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector        = Icons.Default.CloudDownload,
+                contentDescription = null,
+                tint               = HubColors.NeonGreen.copy(alpha = 0.85f),
+                modifier           = Modifier.size(16.dp)
+            )
+            Text(
+                text     = "Translation model for $languageName not downloaded.",
+                color    = HubColors.NeonGreen,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onOpenLanguages) {
+                Text(
+                    text          = "DOWNLOAD",
+                    color         = HubColors.NeonGreen,
+                    fontSize      = 11.sp,
+                    fontWeight    = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
+            }
+        }
+    }
+}
+
+// ── Reticle target helper ──────────────────────────────────────────────────────
+
+/**
+ * Computes the screen-space union of [blocks]' image-space bounding boxes,
+ * applying the same FILL_CENTER mapping and front-camera mirror that
+ * [ClassicArLensOverlay] uses. Returns (Float.NaN × 4) when there are no blocks.
+ */
+@Composable
+private fun computeReticleTarget(
+    blocks: List<com.app.ttsreader.viewmodel.ArLensBlock>,
+    imgW: Int,
+    imgH: Int,
+    isFront: Boolean,
+): com.app.ttsreader.ar.ReticleQuad {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    if (blocks.isEmpty() || imgW <= 0 || imgH <= 0) {
+        return com.app.ttsreader.ar.ReticleQuad(Float.NaN, Float.NaN, Float.NaN, Float.NaN)
+    }
+    val sw = with(density) { configuration.screenWidthDp.dp.toPx() }
+    val sh = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val scale = kotlin.math.max(sw / imgW.toFloat(), sh / imgH.toFloat())
+    val ox = (sw - imgW * scale) / 2f
+    val oy = (sh - imgH * scale) / 2f
+
+    var l = Float.POSITIVE_INFINITY
+    var t = Float.POSITIVE_INFINITY
+    var r = Float.NEGATIVE_INFINITY
+    var b = Float.NEGATIVE_INFINITY
+    for (block in blocks) {
+        val sL0 = block.smoothedBox.left  * scale + ox
+        val sR0 = block.smoothedBox.right * scale + ox
+        val sT  = block.smoothedBox.top   * scale + oy
+        val sB  = block.smoothedBox.bottom * scale + oy
+        val sL = if (isFront) sw - sR0 else sL0
+        val sR = if (isFront) sw - sL0 else sR0
+        if (sL < l) l = sL
+        if (sT < t) t = sT
+        if (sR > r) r = sR
+        if (sB > b) b = sB
+    }
+    return com.app.ttsreader.ar.ReticleQuad(l, t, r, b)
 }
 
 // ── Offline banner ─────────────────────────────────────────────────────────────

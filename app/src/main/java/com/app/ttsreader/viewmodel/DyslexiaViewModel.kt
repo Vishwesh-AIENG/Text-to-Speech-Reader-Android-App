@@ -2,6 +2,7 @@ package com.app.ttsreader.viewmodel
 
 import android.app.Application
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LifecycleOwner
@@ -15,7 +16,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -94,6 +94,15 @@ class DyslexiaViewModel(application: Application) : AndroidViewModel(application
         tts = TextToSpeech(application) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.getDefault()
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onError(utteranceId: String?) {
+                        scheduleAutoAdvance(utteranceId)
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        scheduleAutoAdvance(utteranceId)
+                    }
+                })
                 ttsReady = true
             }
         }
@@ -101,9 +110,42 @@ class DyslexiaViewModel(application: Application) : AndroidViewModel(application
 
     // ── TTS helper ─────────────────────────────────────────────────────────────
 
+    /**
+     * Monotonically-increasing id stamped onto every utterance.
+     * Auto-advance only fires when the just-finished utterance matches the
+     * latest id — so manual taps (which bump the counter) can't be raced by
+     * an `onDone` from an earlier word.
+     */
+    private var lastUtteranceId: Long = 0L
+
     private fun speakWord(word: String) {
         if (word.isBlank() || !ttsReady) return
-        tts?.speak(word, TextToSpeech.QUEUE_FLUSH, null, null)
+        lastUtteranceId += 1
+        tts?.speak(word, TextToSpeech.QUEUE_FLUSH, null, lastUtteranceId.toString())
+    }
+
+    /**
+     * Called from the TTS thread when an utterance finishes. If auto-read is
+     * still active and this is the most recent utterance, schedule the next
+     * word after the configured inter-word pause.
+     */
+    private fun scheduleAutoAdvance(utteranceId: String?) {
+        val id = utteranceId?.toLongOrNull() ?: return
+        if (id != lastUtteranceId) return
+        if (!_uiState.value.isAutoReading) return
+        autoJob?.cancel()
+        autoJob = viewModelScope.launch {
+            delay(_uiState.value.autoSpeedMs)
+            if (!_uiState.value.isAutoReading) return@launch
+            val before = _uiState.value
+            nextWord()
+            val after = _uiState.value
+            // Reached the end — stop auto
+            if (before.activeParagraphIdx == after.activeParagraphIdx &&
+                before.activeWordIdx      == after.activeWordIdx) {
+                _uiState.value = _uiState.value.copy(isAutoReading = false)
+            }
+        }
     }
 
     // ── Sub-mode control ───────────────────────────────────────────────────────
@@ -274,25 +316,18 @@ class DyslexiaViewModel(application: Application) : AndroidViewModel(application
 
     fun toggleAuto() {
         if (_uiState.value.isAutoReading) {
-            tts?.stop()
             autoJob?.cancel()
+            autoJob = null
+            tts?.stop()
             _uiState.value = _uiState.value.copy(isAutoReading = false)
         } else {
             _uiState.value = _uiState.value.copy(isAutoReading = true)
-            autoJob = viewModelScope.launch {
-                while (isActive && _uiState.value.isAutoReading) {
-                    delay(_uiState.value.autoSpeedMs)
-                    val before = _uiState.value
-                    nextWord()
-                    val after = _uiState.value
-                    // Reached the end — stop auto
-                    if (before.activeParagraphIdx == after.activeParagraphIdx &&
-                        before.activeWordIdx      == after.activeWordIdx) {
-                        _uiState.value = _uiState.value.copy(isAutoReading = false)
-                        break
-                    }
-                }
-            }
+            // Re-speak the current word; chaining is driven by the
+            // UtteranceProgressListener → scheduleAutoAdvance() pipeline,
+            // which only advances AFTER the TTS engine reports onDone.
+            val s = _uiState.value
+            val word = s.paragraphs.getOrNull(s.activeParagraphIdx)?.getOrNull(s.activeWordIdx)
+            if (word != null) speakWord(word) else _uiState.value = _uiState.value.copy(isAutoReading = false)
         }
     }
 

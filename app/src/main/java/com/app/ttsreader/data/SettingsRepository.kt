@@ -57,6 +57,11 @@ class SettingsRepository(context: Context) {
     val onboardingShown: Flow<Boolean> = dataStore.onboardingShown
     suspend fun setOnboardingShown(shown: Boolean) { dataStore.setOnboardingShown(shown) }
 
+    // ── Terms & Conditions ───────────────────────────────────────────────────────
+
+    val termsAccepted: Flow<Boolean> = dataStore.termsAccepted
+    suspend fun setTermsAccepted(accepted: Boolean) { dataStore.setTermsAccepted(accepted) }
+
     // ── Overlay style ────────────────────────────────────────────────────────────
 
     val useSdfOverlay: Flow<Boolean> = dataStore.useSdfOverlay

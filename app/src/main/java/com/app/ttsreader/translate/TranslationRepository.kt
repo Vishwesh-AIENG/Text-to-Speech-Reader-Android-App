@@ -1,6 +1,8 @@
 package com.app.ttsreader.translate
 
 import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.common.model.RemoteModelManager
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
@@ -8,6 +10,25 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
+import java.io.IOException
+
+/**
+ * Typed failure modes for translation. Lets callers (AR Lens) show specific UX
+ * for the "model not downloaded" case instead of swallowing it as a generic error.
+ */
+sealed class TranslationError(message: String) : Exception(message) {
+    /** The required ML Kit model for the language pair is not present on-device. */
+    class ModelMissing(val languageCode: String) :
+        TranslationError("Translation model not downloaded: $languageCode")
+
+    /** Network / download failure (offline, ML Kit servers unreachable). */
+    class Network(cause: Throwable) :
+        TranslationError("Translation network error: ${cause.message}")
+
+    /** Unclassified failure. */
+    class Unknown(cause: Throwable) :
+        TranslationError("Translation failed: ${cause.message}")
+}
 
 /**
  * Manages ML Kit on-device translation.
@@ -76,16 +97,54 @@ class TranslationRepository {
                 modelReady = true
             } catch (e: Exception) {
                 _state.value = TranslationState.Idle   // don't leave spinner stuck
-                throw e
+                throw classifyError(e)
             }
         }
 
         _state.value = TranslationState.Translating
         return try {
             translator!!.translate(text).await()
+        } catch (e: Exception) {
+            throw classifyError(e)
         } finally {
             // Always return to Idle, even if translate() throws
             _state.value = TranslationState.Idle
+        }
+    }
+
+    /** Maps raw ML Kit / coroutine exceptions to typed [TranslationError]s. */
+    private fun classifyError(e: Throwable): Throwable {
+        if (e is TranslationError) return e
+        // ML Kit raises MlKitException for missing model and IOException for network.
+        val message = e.message?.lowercase() ?: ""
+        return when {
+            e is IOException || "network" in message || "internet" in message ->
+                TranslationError.Network(e)
+            "model" in message && ("missing" in message || "not found" in message) ->
+                TranslationError.ModelMissing(currentTargetLang)
+            else -> TranslationError.Unknown(e)
+        }
+    }
+
+    /**
+     * Checks whether the ML Kit model for the given language pair is available
+     * locally. Returns `Result.success` if so, or `Result.failure(TranslationError.ModelMissing)`
+     * naming the first missing side. Both source and target models must be present.
+     *
+     * Does NOT download; pairs with [downloadLanguage] in [com.app.ttsreader.viewmodel.SettingsViewModel].
+     */
+    suspend fun ensureModelDownloaded(sourceLang: String, targetLang: String): Result<Unit> {
+        if (sourceLang == targetLang) return Result.success(Unit)
+        return runCatching {
+            val downloaded = getDownloadedModelCodes()
+            // ML Kit always uses English as a pivot — at minimum the target model
+            // is required. The source model is required if source != English.
+            if (sourceLang != "en" && sourceLang !in downloaded) {
+                throw TranslationError.ModelMissing(sourceLang)
+            }
+            if (targetLang != "en" && targetLang !in downloaded) {
+                throw TranslationError.ModelMissing(targetLang)
+            }
         }
     }
 
@@ -95,8 +154,8 @@ class TranslationRepository {
      * next to languages whose models aren't yet cached on-device.
      */
     suspend fun getDownloadedModelCodes(): Set<String> {
-        val models = com.google.mlkit.common.model.RemoteModelManager.getInstance()
-            .getDownloadedModels(com.google.mlkit.nl.translate.TranslateRemoteModel::class.java)
+        val models = RemoteModelManager.getInstance()
+            .getDownloadedModels(TranslateRemoteModel::class.java)
             .await()
         return models.map { it.language }.toSet()
     }
@@ -107,8 +166,8 @@ class TranslationRepository {
      * if you're keeping English as a fixed source.
      */
     suspend fun deleteModel(languageCode: String) {
-        val modelManager = com.google.mlkit.common.model.RemoteModelManager.getInstance()
-        val model = com.google.mlkit.nl.translate.TranslateRemoteModel.Builder(languageCode).build()
+        val modelManager = RemoteModelManager.getInstance()
+        val model = TranslateRemoteModel.Builder(languageCode).build()
         modelManager.deleteDownloadedModel(model).await()
         // Reset model-ready flag if the deleted model is the current target
         if (languageCode == currentTargetLang || languageCode == currentSourceLang) {

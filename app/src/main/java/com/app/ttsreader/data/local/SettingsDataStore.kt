@@ -48,6 +48,9 @@ class SettingsDataStore(private val context: Context) {
     val onboardingShown: Flow<Boolean>
         get() = context.dataStore.data.map { it[KEY_ONBOARDING_SHOWN] ?: false }
 
+    val termsAccepted: Flow<Boolean>
+        get() = context.dataStore.data.map { it[KEY_TERMS_ACCEPTED] ?: false }
+
     val useSdfOverlay: Flow<Boolean>
         get() = context.dataStore.data.map { it[KEY_SDF_OVERLAY] ?: false }
 
@@ -77,6 +80,10 @@ class SettingsDataStore(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[KEY_ONBOARDING_SHOWN] = shown }
     }
 
+    suspend fun setTermsAccepted(accepted: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_TERMS_ACCEPTED] = accepted }
+    }
+
     suspend fun setUseSdfOverlay(use: Boolean) {
         context.dataStore.edit { prefs -> prefs[KEY_SDF_OVERLAY] = use }
     }
@@ -88,6 +95,7 @@ class SettingsDataStore(private val context: Context) {
         private val KEY_PITCH          = floatPreferencesKey("pitch")
         private val KEY_FONT_SIZE        = intPreferencesKey("font_size")
         private val KEY_ONBOARDING_SHOWN = booleanPreferencesKey("onboarding_shown")
+        private val KEY_TERMS_ACCEPTED   = booleanPreferencesKey("terms_accepted")
         private val KEY_SDF_OVERLAY      = booleanPreferencesKey("sdf_overlay")
 
     }

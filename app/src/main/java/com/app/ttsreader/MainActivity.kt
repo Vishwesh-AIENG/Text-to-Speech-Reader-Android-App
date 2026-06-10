@@ -40,6 +40,7 @@ import com.app.ttsreader.ui.components.GlassBackground
 import com.app.ttsreader.ui.screens.BabelScreen
 import com.app.ttsreader.ui.screens.ComingSoonScreen
 import com.app.ttsreader.ui.screens.DyslexiaScreen
+import com.app.ttsreader.ui.screens.ArHistoryScreen
 import com.app.ttsreader.ui.screens.ArLensScreen
 import com.app.ttsreader.ui.screens.EReaderLibraryScreen
 import com.app.ttsreader.ui.screens.ReaderScreen
@@ -49,6 +50,7 @@ import com.app.ttsreader.ui.screens.LanguagesScreen
 import com.app.ttsreader.ui.screens.MainScreen
 import com.app.ttsreader.ui.screens.OnboardingScreen
 import com.app.ttsreader.ui.screens.SettingsScreen
+import com.app.ttsreader.ui.screens.TermsScreen
 import com.app.ttsreader.review.InAppReviewManager
 import com.app.ttsreader.ui.theme.OmniLingoTheme
 import com.app.ttsreader.viewmodel.SettingsViewModel
@@ -82,6 +84,7 @@ private fun AppRoot() {
 
     var showSettings   by rememberSaveable { mutableStateOf(false) }
     var showLanguages  by rememberSaveable { mutableStateOf(false) }
+    var showArHistory  by rememberSaveable { mutableStateOf(false) }
     var selectedTab    by rememberSaveable { mutableIntStateOf(0) }
     var selectedBookId by rememberSaveable { mutableStateOf<Long?>(null) }
 
@@ -99,6 +102,11 @@ private fun AppRoot() {
                 OnboardingScreen(
                     onFinished = { settingsViewModel.completeOnboarding() }
                 )
+            }
+
+            // ── 1b. Terms & Conditions gate (must accept once) ───────────────
+            !settingsState.termsAccepted -> {
+                TermsScreen(onAccept = { settingsViewModel.acceptTerms() })
             }
 
             // ── 2. Settings overlay ───────────────────────────────────────────
@@ -175,10 +183,16 @@ private fun AppRoot() {
             }
 
             // ── 7. AR Magic Lens ──────────────────────────────────────────────
+            activeMode == AppMode.AR_MAGIC_LENS && showArHistory -> {
+                ArHistoryScreen(
+                    onNavigateBack = { showArHistory = false }
+                )
+            }
             activeMode == AppMode.AR_MAGIC_LENS -> {
                 ArLensScreen(
                     onNavigateBack  = { activeMode = null },
-                    onOpenLanguages = { showLanguages = true }
+                    onOpenLanguages = { showLanguages = true },
+                    onOpenHistory   = { showArHistory = true }
                 )
             }
 

@@ -180,6 +180,11 @@ class BabelViewModel(application: Application) : AndroidViewModel(application) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang.locale.toLanguageTag())
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Be patient — give the user time to start and finish a sentence
+            // rather than bailing out (and re-beeping) on the first half-second of silence.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
         }
         recognizer?.startListening(intent)
     }
@@ -254,8 +259,10 @@ class BabelViewModel(application: Application) : AndroidViewModel(application) {
                 ?.trim()
 
             if (text.isNullOrEmpty()) {
-                // Nothing heard — silently retry same speaker
-                if (_uiState.value.sessionActive) startListening(_uiState.value.isTopActive)
+                // Nothing heard — drop to IDLE so the user can tap the mic
+                // when they're ready. Auto-restarting here causes a constant
+                // sequence of recognition-start beeps.
+                _uiState.value = _uiState.value.copy(phase = BabelPhase.IDLE, rmsLevel = 0f)
                 return
             }
             processRecognizedText(text, _uiState.value.isTopActive)
@@ -263,10 +270,12 @@ class BabelViewModel(application: Application) : AndroidViewModel(application) {
 
         override fun onError(error: Int) {
             when (error) {
-                // Silent retry — user just didn't speak or timed out
+                // User didn't speak — go IDLE silently. Don't auto-restart, as
+                // each startListening() triggers the system recognition tone
+                // and produces a "constant beeping" loop while the user thinks.
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                    if (_uiState.value.sessionActive) startListening(_uiState.value.isTopActive)
+                    _uiState.value = _uiState.value.copy(phase = BabelPhase.IDLE, rmsLevel = 0f)
                 }
 
                 // Permission missing — surface error and stop session
@@ -278,7 +287,7 @@ class BabelViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                // Recognizer busy — wait briefly then retry
+                // Recognizer busy — wait briefly then retry (single beep)
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
                     viewModelScope.launch {
                         delay(600L)
@@ -289,9 +298,9 @@ class BabelViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // All other errors — silent retry
+                // All other errors — drop to IDLE, let the user retry manually
                 else -> {
-                    if (_uiState.value.sessionActive) startListening(_uiState.value.isTopActive)
+                    _uiState.value = _uiState.value.copy(phase = BabelPhase.IDLE, rmsLevel = 0f)
                 }
             }
         }

@@ -1,102 +1,141 @@
 package com.app.ttsreader.viewmodel
 
 import android.app.Application
-import android.graphics.Point
-import android.graphics.Rect
 import android.graphics.RectF
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewModelScope
+import com.app.ttsreader.ar.HungarianAssigner
+import com.app.ttsreader.ar.TrackedBlockState
 import com.app.ttsreader.camera.ArLensAnalyzer
 import com.app.ttsreader.camera.CameraController
+import com.app.ttsreader.data.local.AppDatabase
+import com.app.ttsreader.data.local.ArHistoryDao
 import com.app.ttsreader.domain.model.AppLanguage
 import com.app.ttsreader.network.NetworkMonitor
 import com.app.ttsreader.ocr.SpatialWord
+import com.app.ttsreader.translate.TranslationError
 import com.app.ttsreader.translate.TranslationRepository
+import com.app.ttsreader.tts.SpeechController
 import com.app.ttsreader.utils.FuzzyMatcher
 import com.app.ttsreader.utils.LanguageUtils
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.Collections
-import java.util.LinkedHashMap
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
-import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 
-// ── Domain model ──────────────────────────────────────────────────────────────
+// ── Public domain model published to the UI ────────────────────────────────────
 
 /**
- * A single text block that has been detected, stabilised, and translated.
+ * One detected text region that is ready to be drawn.
  *
- * @param id            Stable tracking ID for this physical text occurrence.
- * @param originalText  Text as it appears on the physical object.
+ * @param id            Stable monotonic id (decoupled from spatial position).
+ * @param originalText  Raw OCR text.
  * @param translatedText Translation in the target language. Empty while pending.
- * @param smoothedBox   EMA-smoothed bounding box in **image space** (portrait).
- * @param displayAlpha  Current render alpha [0, 1]. Animated towards 0 if the
- *                      block is unstable, towards 1 when stable with a translation.
+ * @param smoothedBox   Position in **image space** (post-rotation, origin TL).
+ *                      The overlay maps this to screen space.
+ * @param displayAlpha  Target alpha in [0, 1]. The renderer interpolates toward this
+ *                      at display refresh rate via its own `withFrameNanos` loop.
  */
-@Suppress("ArrayInDataClass")
 data class ArLensBlock(
-    val id: String,
+    val id: Long,
     val originalText: String,
     val translatedText: String,
     val smoothedBox: RectF,
     val displayAlpha: Float,
-    val cornerPoints: Array<Point>? = null
 )
 
-// ── UI state ──────────────────────────────────────────────────────────────────
-
 data class ArLensUiState(
-    val blocks: List<ArLensBlock>   = emptyList(),
-    val imageEffectiveWidth: Int    = 1,
-    val imageEffectiveHeight: Int   = 1,
-    val sourceLang: AppLanguage     = LanguageUtils.DEFAULT_SOURCE,
-    val targetLang: AppLanguage     = LanguageUtils.DEFAULT_TARGET,
-    val isPickingSource: Boolean    = false,
-    val isPickingTarget: Boolean    = false,
-    val isOffline: Boolean          = false,
-    val statusMessage: String       = ""
+    val blocks: List<ArLensBlock> = emptyList(),
+    /** Sentinel `-1` until the first real frame has been processed. */
+    val imageEffectiveWidth: Int  = -1,
+    val imageEffectiveHeight: Int = -1,
+    val isFrontCamera: Boolean    = false,
+    val sourceLang: AppLanguage   = LanguageUtils.DEFAULT_SOURCE,
+    val targetLang: AppLanguage   = LanguageUtils.DEFAULT_TARGET,
+    val isPickingSource: Boolean  = false,
+    val isPickingTarget: Boolean  = false,
+    val isOffline: Boolean        = false,
+    val missingModelLang: String? = null,
+    val statusMessage: String     = "",
 )
 
 /**
- * ViewModel for the AR Magic Lens mode.
+ * Total renovation of the AR Magic Lens tracker.
  *
- * ## Pipeline
- * 1. Each [SpatialWord] from the native engine is spatially grouped into text lines.
- * 2. Each line-group is matched to an existing [TrackedBlock] via text similarity
- *    ([FuzzyMatcher.score] ≥ 0.75) or spatial proximity (< 60 px).
- * 3. Matched blocks receive EMA-smoothed position updates (adaptive α 0.15–0.50).
- * 4. A block is **stable** when all displacements in the window are < 15 px.
- * 5. Stable blocks trigger a one-shot translation request.
- * 6. [displayAlpha] lerps towards 1 when stable + translated, towards 0 otherwise.
- * 7. Blocks missing for > [MAX_MISSED_FRAMES] are evicted.
+ * ## Tracker
+ * - Hungarian (Jonker-Volgenant) cost-matrix matching replaces greedy NN.
+ * - Per-block constant-velocity predictor — a missed frame extrapolates by
+ *   `velocity·dt` instead of freezing.
+ * - Monotonic [AtomicLong] ids; motion never mints a new id.
+ *
+ * ## Threading
+ * All [trackedBlocks] mutations dispatch onto a single-permit dispatcher
+ * ([trackerDispatcher]). No locks needed; no races possible.
+ *
+ * ## Translation
+ * Cache keyed by `(src, tgt, text)`. In-flight jobs tracked in [inFlight] and
+ * cancelled on language change. Fan-out bounded by [translationGate].
+ *
+ * ## Pause
+ * Pause emits an EMPTY block list AND resets image dims to the `-1` sentinel
+ * so the overlay refuses to render until a fresh frame replaces them.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ArLensViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(ArLensUiState())
     val uiState: StateFlow<ArLensUiState> = _uiState.asStateFlow()
 
-    private val cameraController   = CameraController(application)
-    private val analyzer           = ArLensAnalyzer(
+    private val cameraController = CameraController(application)
+    private val analyzer         = ArLensAnalyzer(
         onResult   = ::onFrameAnalyzed,
-        throttleMs = 100L
+        throttleMs = ANALYZER_THROTTLE_MS,
     )
-    private val translationRepo    = TranslationRepository()
-    private val networkMonitor     = NetworkMonitor(application)
+    private val translationRepo  = TranslationRepository()
+    private val networkMonitor   = NetworkMonitor(application)
+    private val speechController = SpeechController(application)
+    private val historyDao: ArHistoryDao = AppDatabase.getInstance(application).arHistoryDao()
 
-    private val translationCache: MutableMap<String, String> = Collections.synchronizedMap(
-        object : LinkedHashMap<String, String>(256, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>) =
-                size > 200
-        }
-    )
-    private val translationPending = ConcurrentHashMap<String, Boolean>()
-    private val trackedBlocks      = mutableMapOf<String, TrackedBlock>()
+    /** Single-permit dispatcher — all tracker mutations confine here. */
+    private val trackerDispatcher: CoroutineDispatcher =
+        Dispatchers.Default.limitedParallelism(1)
+
+    /** Owned exclusively by [trackerDispatcher]. */
+    private val trackedBlocks = ArrayList<TrackedBlockState>(32)
+    private val nextId = AtomicLong(1L)
+    private var lastRotationDegrees = Int.MIN_VALUE
+    private var lastFrameNs: Long = 0L
+
+    /** Per-(src,tgt,text) translation cache. */
+    private val translationCache = ConcurrentHashMap<String, String>()
+    /** Keys already queued OR running — prevents the same text being re-enqueued every frame. */
+    private val pendingKeys = ConcurrentHashMap.newKeySet<String>()
+    /** Running translation coroutines — cancelled on language change. */
+    private val inFlight = ConcurrentHashMap<String, Job>()
+    /** Bounded fan-out. */
+    private val translationGate = Semaphore(MAX_CONCURRENT_TRANSLATIONS)
+    private val translationRequests = Channel<TranslationRequest>(Channel.UNLIMITED)
+
+    /** Scratch buffers for the Hungarian solver — kept across frames so the
+     *  per-frame call allocates nothing. */
+    private val assignerScratch = HungarianAssigner.Scratch()
+    private var costBuf  = FloatArray(64)
+    private var assignBuf = IntArray(8)
 
     init {
         viewModelScope.launch {
@@ -104,9 +143,24 @@ class ArLensViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.value = _uiState.value.copy(isOffline = !isOnline)
             }
         }
+        // Translation dispatcher — drains the channel and launches each request
+        // as its own coroutine so the actual translate() call is cancellable.
+        viewModelScope.launch(Dispatchers.IO) {
+            for (req in translationRequests) {
+                val key = cacheKey(req.sourceLang, req.targetLang, req.text)
+                val job = launch {
+                    translationGate.withPermit { handleTranslation(req) }
+                }
+                inFlight[key] = job
+                job.invokeOnCompletion {
+                    inFlight.remove(key, job)
+                    pendingKeys.remove(key)
+                }
+            }
+        }
     }
 
-    // ── Camera ─────────────────────────────────────────────────────────────────
+    // ── Camera lifecycle ───────────────────────────────────────────────────────
 
     fun startCamera(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
         viewModelScope.launch(Dispatchers.Main) {
@@ -118,279 +172,433 @@ class ArLensViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Called when ArLensScreen leaves composition. Image-space coordinates are
+     * NOT portable across camera sessions — clear everything and emit empty
+     * blocks + sentinel dims so the overlay refuses to render until the next
+     * fresh frame arrives.
+     */
+    fun pause() {
+        cameraController.pauseCamera()
+        viewModelScope.launch(trackerDispatcher) {
+            trackedBlocks.clear()
+            lastRotationDegrees = Int.MIN_VALUE
+            _uiState.value = _uiState.value.copy(
+                blocks = emptyList(),
+                imageEffectiveWidth = -1,
+                imageEffectiveHeight = -1,
+            )
+        }
+    }
+
     // ── Language selection ─────────────────────────────────────────────────────
 
     fun setSourceLanguage(lang: AppLanguage) {
-        _uiState.value = _uiState.value.copy(sourceLang = lang, isPickingSource = false)
-        translationCache.clear()
-        translationPending.clear()
-        trackedBlocks.values.forEach { it.translatedText = "" }
+        viewModelScope.launch(trackerDispatcher) {
+            cancelAllTranslations()
+            translationCache.clear()
+            for (b in trackedBlocks) b.translatedText = ""
+            _uiState.value = _uiState.value.copy(
+                sourceLang = lang,
+                isPickingSource = false,
+                missingModelLang = null,
+            )
+            checkRequiredModels()
+        }
     }
 
     fun setTargetLanguage(lang: AppLanguage) {
-        _uiState.value = _uiState.value.copy(targetLang = lang, isPickingTarget = false)
-        translationCache.clear()
-        translationPending.clear()
-        trackedBlocks.values.forEach { it.translatedText = "" }
+        viewModelScope.launch(trackerDispatcher) {
+            cancelAllTranslations()
+            translationCache.clear()
+            for (b in trackedBlocks) b.translatedText = ""
+            _uiState.value = _uiState.value.copy(
+                targetLang = lang,
+                isPickingTarget = false,
+                missingModelLang = null,
+            )
+            checkRequiredModels()
+        }
+    }
+
+    private fun cancelAllTranslations() {
+        inFlight.values.forEach { it.cancel() }
+        inFlight.clear()
+        pendingKeys.clear()
     }
 
     fun openSourcePicker() { _uiState.value = _uiState.value.copy(isPickingSource = true) }
     fun openTargetPicker() { _uiState.value = _uiState.value.copy(isPickingTarget = true) }
     fun closePicker()      { _uiState.value = _uiState.value.copy(isPickingSource = false, isPickingTarget = false) }
 
-    // ── Line conversion ────────────────────────────────────────────────────────
-
-    /**
-     * Each incoming [SpatialWord] already represents a full ML Kit text line
-     * (produced by [TextAnalyzer.extractLines]). No manual re-grouping is needed —
-     * just convert directly to [NativeBlock] using ML Kit's own geometry.
-     */
-    private data class NativeBlock(
-        val text: String,
-        val box: RectF,
-        val cornerPoints: Array<Point>?
-    ) {
-        val centerX: Float get() = (box.left + box.right)  / 2f
-        val centerY: Float get() = (box.top  + box.bottom) / 2f
+    private fun checkRequiredModels() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val src = _uiState.value.sourceLang.mlKitCode
+            val tgt = _uiState.value.targetLang.mlKitCode
+            translationRepo.ensureModelDownloaded(src, tgt)
+                .onFailure { e ->
+                    val missing = (e as? TranslationError.ModelMissing)?.languageCode
+                    _uiState.value = _uiState.value.copy(missingModelLang = missing)
+                }
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(missingModelLang = null)
+                }
+        }
     }
 
-    private fun groupWordsIntoBlocks(words: List<SpatialWord>): List<NativeBlock> =
-        words.mapNotNull { word ->
-            if (word.text.isBlank()) return@mapNotNull null
-            val rect = word.toBoundingRect()
-            NativeBlock(
-                text         = word.text,
-                box          = RectF(rect.left.toFloat(), rect.top.toFloat(),
-                                     rect.right.toFloat(), rect.bottom.toFloat()),
-                cornerPoints = word.toCornerPoints()
-            )
-        }.filter { it.box.width() >= 20f && it.box.height() >= 8f }
+    // ── Tap-to-pronounce ───────────────────────────────────────────────────────
 
-    // ── Frame analysis ─────────────────────────────────────────────────────────
+    /**
+     * Speak the translated text of [block] in the target language. Called by the
+     * overlay when the user taps a bounding box.
+     */
+    fun speakBlock(block: ArLensBlock) {
+        val locale = _uiState.value.targetLang.locale
+        speechController.setLanguage(locale)
+        val phrase = block.translatedText.ifEmpty { block.originalText }
+        if (phrase.isNotBlank()) speechController.speak(phrase)
+    }
 
+    // ── Frame ingestion ────────────────────────────────────────────────────────
+
+    /**
+     * Receives a frame of detections from [ArLensAnalyzer] on its single-thread
+     * executor; immediately hops onto [trackerDispatcher] so the heavy work is
+     * confined and `trackedBlocks` needs no locks.
+     */
     private fun onFrameAnalyzed(
         words: List<SpatialWord>,
         imageWidth: Int,
         imageHeight: Int,
-        rotationDegrees: Int
+        rotationDegrees: Int,
+        isFrontCamera: Boolean,
+    ) {
+        viewModelScope.launch(trackerDispatcher) {
+            processFrame(words, imageWidth, imageHeight, rotationDegrees, isFrontCamera)
+        }
+    }
+
+    private fun processFrame(
+        words: List<SpatialWord>,
+        imageWidth: Int,
+        imageHeight: Int,
+        rotationDegrees: Int,
+        isFrontCamera: Boolean,
     ) {
         val effectiveW = if (rotationDegrees == 90 || rotationDegrees == 270) imageHeight else imageWidth
         val effectiveH = if (rotationDegrees == 90 || rotationDegrees == 270) imageWidth  else imageHeight
+        val minImageDim = min(effectiveW, effectiveH).toFloat().coerceAtLeast(1f)
 
-        // Accept all detected regions regardless of text content.
-        // When CRNN model is not loaded all texts are ""; filtering by length
-        // would silently drop every detection. The stability classifier will
-        // reject genuine noise (it won't hold stable for STABLE_FRAMES_REQUIRED frames).
-        val newBlocks = groupWordsIntoBlocks(words)
+        val nowNs = System.nanoTime()
+        val dtMs = if (lastFrameNs == 0L) 0f else (nowNs - lastFrameNs) / 1_000_000f
+        val rotationChanged = rotationDegrees != lastRotationDegrees && lastRotationDegrees != Int.MIN_VALUE
+        lastFrameNs = nowNs
+        lastRotationDegrees = rotationDegrees
 
-        val matchedIds = mutableSetOf<String>()
-        val nowMs = System.currentTimeMillis()
+        // Coordinate spaces aren't portable across rotation. Drop everything.
+        if (rotationChanged) trackedBlocks.clear()
 
-        for (block in newBlocks) {
-            val rawCX = block.centerX
-            val rawCY = block.centerY
-
-            val bestMatch = trackedBlocks.values
-                .filter { it.id !in matchedIds }
-                .minByOrNull { tracked ->
-                    val tCX = (tracked.smoothedLeft + tracked.smoothedRight)  / 2f
-                    val tCY = (tracked.smoothedTop  + tracked.smoothedBottom) / 2f
-                    val spatialDist = hypot((rawCX - tCX).toDouble(), (rawCY - tCY).toDouble()).toFloat()
-                    val textSim     = FuzzyMatcher.score(block.text, tracked.originalText)
-                    // Require meaningful text similarity — spatial proximity alone is not enough.
-                    // This prevents old stale blocks being "refreshed" by nearby different text.
-                    val textMatch   = textSim >= 0.75f
-                    val spatialClose = spatialDist < SPATIAL_MATCH_PX && textSim >= TEXT_SIM_THRESHOLD
-                    if (textMatch || spatialClose) spatialDist else Float.MAX_VALUE
-                }
-
-            if (bestMatch != null) {
-                matchedIds.add(bestMatch.id)
-                bestMatch.lastSeenTimeMs = nowMs   // ← timestamp reset on every real match
-
-                val prevCX = (bestMatch.smoothedLeft + bestMatch.smoothedRight)  / 2f
-                val prevCY = (bestMatch.smoothedTop  + bestMatch.smoothedBottom) / 2f
-                val displacement = hypot(
-                    (rawCX - prevCX).toDouble(),
-                    (rawCY - prevCY).toDouble()
-                ).toFloat()
-
-                if (bestMatch.recentDisplacements.size >= STABILITY_WINDOW) {
-                    bestMatch.recentDisplacements.removeFirst()
-                }
-                bestMatch.recentDisplacements.addLast(displacement)
-
-                val avgDisp = if (bestMatch.recentDisplacements.isEmpty()) EMA_ALPHA
-                              else bestMatch.recentDisplacements.average().toFloat()
-                val adaptiveAlpha = when {
-                    avgDisp < 8f  -> 0.50f
-                    avgDisp > 30f -> 0.15f
-                    else          -> EMA_ALPHA
-                }
-                bestMatch.smoothedLeft   += adaptiveAlpha * (block.box.left   - bestMatch.smoothedLeft)
-                bestMatch.smoothedTop    += adaptiveAlpha * (block.box.top    - bestMatch.smoothedTop)
-                bestMatch.smoothedRight  += adaptiveAlpha * (block.box.right  - bestMatch.smoothedRight)
-                bestMatch.smoothedBottom += adaptiveAlpha * (block.box.bottom - bestMatch.smoothedBottom)
-                bestMatch.cornerPoints   = block.cornerPoints
-                bestMatch.missedFrames   = 0
-
-                val isStable = bestMatch.recentDisplacements.size >= STABILITY_WINDOW &&
-                               bestMatch.recentDisplacements.max() < MAX_DISPLACEMENT_PX
-
-                if (isStable) bestMatch.stableFrameCount++ else bestMatch.stableFrameCount = 0
-
-                val cachedTranslation = translationCache[bestMatch.originalText]
-                if (cachedTranslation != null) {
-                    bestMatch.translatedText = cachedTranslation
-                } else if (isStable
-                    && bestMatch.stableFrameCount >= STABLE_FRAMES_REQUIRED
-                    && translationPending[bestMatch.originalText] != true
-                ) {
-                    requestTranslation(bestMatch.originalText)
-                }
-
-                // Show block as soon as it is stable — original text is visible
-                // immediately; translated text replaces it once the request finishes.
-                val targetAlpha = if (isStable) 1f else 0f
-                bestMatch.displayAlpha += (targetAlpha - bestMatch.displayAlpha) * ALPHA_LERP_IN
-
-            } else {
-                val id = buildBlockId(block.text, rawCX, rawCY)
-                trackedBlocks[id] = TrackedBlock(
-                    id             = id,
-                    originalText   = block.text,
-                    smoothedLeft   = block.box.left,
-                    smoothedTop    = block.box.top,
-                    smoothedRight  = block.box.right,
-                    smoothedBottom = block.box.bottom,
-                    displayAlpha   = 0f,
-                    cornerPoints   = block.cornerPoints
+        // Build detections list — filter junk lines.
+        val detections = ArrayList<Detection>(words.size)
+        for (word in words) {
+            if (word.text.isBlank()) continue
+            val r = word.toBoundingRect()
+            val w = (r.right - r.left).toFloat()
+            val h = (r.bottom - r.top).toFloat()
+            if (w < minImageDim * 0.02f || h < minImageDim * 0.008f) continue
+            detections.add(
+                Detection(
+                    text = word.text,
+                    cx = (r.left + r.right) / 2f,
+                    cy = (r.top + r.bottom) / 2f,
+                    w = w,
+                    h = h,
                 )
-                trackedBlocks[id]!!.recentDisplacements.addLast(Float.MAX_VALUE)
-            }
+            )
         }
 
-        val toRemove = mutableListOf<String>()
-        for ((id, tracked) in trackedBlocks) {
-            if (id !in matchedIds) {
-                tracked.missedFrames++
-                tracked.stableFrameCount = 0
-                // Use the faster OUT lerp so unmatched blocks vanish immediately
-                tracked.displayAlpha += (0f - tracked.displayAlpha) * ALPHA_LERP_OUT
-                // Evict if: exceeded max missed frames OR stale by wall-clock time
-                val staleByTime = (nowMs - tracked.lastSeenTimeMs) > STALE_THRESHOLD_MS
-                if (tracked.missedFrames > MAX_MISSED_FRAMES || staleByTime) {
-                    toRemove.add(id)
+        // ── Predict tracker positions to "now" before matching ──────────────
+        // This way, a fast pan doesn't bias matching against the right tracker.
+        for (t in trackedBlocks) {
+            t.cx = t.predictCx(dtMs)
+            t.cy = t.predictCy(dtMs)
+        }
+
+        // ── Cost matrix [detections × trackers] + assignment ────────────────
+        val nd = detections.size
+        val nt = trackedBlocks.size
+        val matched = BooleanArray(nt)
+        val newBlocks = ArrayList<TrackedBlockState>(0)
+
+        if (nd > 0 && nt > 0) {
+            val needed = nd * nt
+            if (costBuf.size < needed) costBuf = FloatArray(needed)
+            if (assignBuf.size < nd) assignBuf = IntArray(nd)
+            val distCap = minImageDim * MAX_MATCH_DIST_FRACTION
+            val distNorm = minImageDim
+            for (i in 0 until nd) {
+                val d = detections[i]
+                for (j in 0 until nt) {
+                    val t = trackedBlocks[j]
+                    val dx = d.cx - t.cx
+                    val dy = d.cy - t.cy
+                    val dist = sqrt(dx * dx + dy * dy)
+                    if (dist > distCap) {
+                        costBuf[i * nt + j] = HungarianAssigner.INF
+                        continue
+                    }
+                    val iouVal = iou(d, t)
+                    val textSim = FuzzyMatcher.score(d.text, t.sourceText)
+                    val textLenDiff = abs(d.text.length - t.sourceText.length)
+                    // Hard reject when text disagrees strongly on longer strings
+                    val textReject = textLenDiff >= 3 && textSim < 0.4f
+                    if (textReject) {
+                        costBuf[i * nt + j] = HungarianAssigner.INF
+                        continue
+                    }
+                    val cost = 0.5f * (1f - iouVal) +
+                               0.3f * (dist / distNorm) +
+                               0.2f * (1f - textSim)
+                    costBuf[i * nt + j] = cost
                 }
             }
-        }
-        toRemove.forEach { trackedBlocks.remove(it) }
+            HungarianAssigner.solve(costBuf, nd, nt, assignBuf, assignerScratch)
 
-        val uiBlocks = trackedBlocks.values
-            .filter  { it.displayAlpha > 0.05f }
-            .map     { tracked ->
+            for (i in 0 until nd) {
+                val j = assignBuf[i]
+                if (j < 0) {
+                    newBlocks.add(newBlock(detections[i], nowNs))
+                } else {
+                    matched[j] = true
+                    updateMatched(trackedBlocks[j], detections[i], dtMs, minImageDim)
+                }
+            }
+        } else if (nd > 0) {
+            for (d in detections) newBlocks.add(newBlock(d, nowNs))
+        }
+
+        // ── Compact-evict unmatched trackers (in-place over the prefix) ────
+        var write = 0
+        for (j in 0 until nt) {
+            val t = trackedBlocks[j]
+            if (!matched[j]) {
+                t.missedFrames++
+                t.stableFrameCount = 0
+                t.vx *= 0.85f
+                t.vy *= 0.85f
+                t.displayAlpha = max(0f, t.displayAlpha - 0.18f)
+                val ageMs = (nowNs - t.lastSeenNs) / 1_000_000L
+                val stale = t.missedFrames > MAX_MISSED_FRAMES || ageMs > STALE_THRESHOLD_MS
+                if (stale && t.displayAlpha <= 0.02f) continue   // drop
+            }
+            if (write != j) trackedBlocks[write] = t
+            write++
+        }
+        // Trim the tail produced by compaction, then append newly-created blocks.
+        while (trackedBlocks.size > write) trackedBlocks.removeAt(trackedBlocks.size - 1)
+        trackedBlocks.addAll(newBlocks)
+
+        // ── Request translation for newly-stable blocks ─────────────────────
+        val srcLang = _uiState.value.sourceLang.mlKitCode
+        val tgtLang = _uiState.value.targetLang.mlKitCode
+        for (t in trackedBlocks) {
+            if (t.stableFrameCount < STABLE_FRAMES_REQUIRED) continue
+            if (t.sourceText.isBlank()) continue
+            val key = cacheKey(srcLang, tgtLang, t.sourceText)
+            val cached = translationCache[key]
+            if (cached != null) {
+                t.translatedText = cached
+            } else if (pendingKeys.add(key)) {
+                // .add() returns false if key already present → already queued
+                translationRequests.trySend(TranslationRequest(t.sourceText, srcLang, tgtLang))
+            }
+        }
+
+        // ── Publish snapshot ────────────────────────────────────────────────
+        val publish = ArrayList<ArLensBlock>(trackedBlocks.size)
+        for (t in trackedBlocks) {
+            if (t.displayAlpha <= 0.02f && t.stableFrameCount < STABLE_FRAMES_REQUIRED) continue
+            publish.add(
                 ArLensBlock(
-                    id             = tracked.id,
-                    originalText   = tracked.originalText,
-                    translatedText = tracked.translatedText,
-                    smoothedBox    = RectF(
-                        tracked.smoothedLeft,
-                        tracked.smoothedTop,
-                        tracked.smoothedRight,
-                        tracked.smoothedBottom
-                    ),
-                    displayAlpha   = tracked.displayAlpha,
-                    cornerPoints   = tracked.cornerPoints
+                    id = t.id,
+                    originalText = t.sourceText,
+                    translatedText = t.translatedText,
+                    smoothedBox = RectF(t.left, t.top, t.right, t.bottom),
+                    displayAlpha = t.displayAlpha,
                 )
-            }
-
+            )
+        }
         _uiState.value = _uiState.value.copy(
-            blocks               = uiBlocks,
-            imageEffectiveWidth  = effectiveW.coerceAtLeast(1),
-            imageEffectiveHeight = effectiveH.coerceAtLeast(1)
+            blocks = publish,
+            imageEffectiveWidth = effectiveW,
+            imageEffectiveHeight = effectiveH,
+            isFrontCamera = isFrontCamera,
         )
     }
 
-    // ── Translation ────────────────────────────────────────────────────────────
+    // ── Tracker primitives ────────────────────────────────────────────────────
 
-    private fun requestTranslation(originalText: String) {
-        translationPending[originalText] = true
-        val state = _uiState.value
-        viewModelScope.launch {
-            try {
-                val translated = translationRepo.translate(
-                    text       = originalText,
-                    sourceLang = state.sourceLang.mlKitCode,
-                    targetLang = state.targetLang.mlKitCode
+    private fun newBlock(d: Detection, nowNs: Long): TrackedBlockState {
+        val t = TrackedBlockState(
+            id = nextId.getAndIncrement(),
+            cx = d.cx, cy = d.cy, w = d.w, h = d.h,
+            sourceText = d.text,
+        )
+        t.lastMeasuredCx = d.cx
+        t.lastMeasuredCy = d.cy
+        t.lastSeenNs = nowNs
+        return t
+    }
+
+    private fun updateMatched(t: TrackedBlockState, d: Detection, dtMs: Float, minImageDim: Float) {
+        // Innovation Δ = measured - predicted; we already moved t to predicted above.
+        val dx = d.cx - t.cx
+        val dy = d.cy - t.cy
+        val disp = sqrt(dx * dx + dy * dy)
+
+        // Adaptive gain: tight matches snap (alpha→1), noisy matches smooth (alpha→0.3).
+        val processNoise = minImageDim * 0.02f
+        val gain = disp / (disp + processNoise + 1e-6f)
+        val alpha = (0.3f + 0.7f * gain).coerceIn(0.3f, 0.95f)
+
+        // Velocity update from finite difference
+        if (dtMs > 1f) {
+            val newVx = (d.cx - t.lastMeasuredCx) / dtMs
+            val newVy = (d.cy - t.lastMeasuredCy) / dtMs
+            // Low-pass smooth velocity to avoid jitter
+            t.vx = 0.4f * t.vx + 0.6f * newVx
+            t.vy = 0.4f * t.vy + 0.6f * newVy
+            // Reset velocity if the displacement is huge — guard against bad matches.
+            if (disp > minImageDim * 0.06f) { t.vx = 0f; t.vy = 0f }
+        }
+        t.cx += alpha * dx
+        t.cy += alpha * dy
+        // Smooth dimensions slowly — text width/height don't change frame-to-frame
+        t.w  = 0.7f * t.w + 0.3f * d.w
+        t.h  = 0.7f * t.h + 0.3f * d.h
+
+        t.lastMeasuredCx = d.cx
+        t.lastMeasuredCy = d.cy
+        t.lastSeenNs = System.nanoTime()
+        t.missedFrames = 0
+
+        // Stability: saturating counter on small per-frame displacements.
+        val stableDisp = disp < minImageDim * 0.012f
+        t.stableFrameCount = if (stableDisp) {
+            min(STABLE_FRAMES_REQUIRED + 2, t.stableFrameCount + 1)
+        } else {
+            max(0, t.stableFrameCount - 1)
+        }
+
+        // Fade in once stable
+        val targetAlpha = if (t.stableFrameCount >= STABLE_FRAMES_REQUIRED) 1f else 0.3f
+        t.displayAlpha += (targetAlpha - t.displayAlpha) * 0.30f
+    }
+
+    private fun iou(d: Detection, t: TrackedBlockState): Float {
+        val ax0 = d.cx - d.w * 0.5f; val ax1 = d.cx + d.w * 0.5f
+        val ay0 = d.cy - d.h * 0.5f; val ay1 = d.cy + d.h * 0.5f
+        val bx0 = t.left; val bx1 = t.right
+        val by0 = t.top;  val by1 = t.bottom
+        val ix0 = max(ax0, bx0); val ix1 = min(ax1, bx1)
+        val iy0 = max(ay0, by0); val iy1 = min(ay1, by1)
+        if (ix1 <= ix0 || iy1 <= iy0) return 0f
+        val inter = (ix1 - ix0) * (iy1 - iy0)
+        val union = d.w * d.h + (bx1 - bx0) * (by1 - by0) - inter
+        return if (union <= 0f) 0f else inter / union
+    }
+
+    private data class Detection(
+        val text: String,
+        val cx: Float,
+        val cy: Float,
+        val w: Float,
+        val h: Float,
+    )
+
+    // ── Translation pipeline ──────────────────────────────────────────────────
+
+    private data class TranslationRequest(
+        val text: String,
+        val sourceLang: String,
+        val targetLang: String,
+    )
+
+    private suspend fun handleTranslation(req: TranslationRequest) {
+        val key = cacheKey(req.sourceLang, req.targetLang, req.text)
+        // Skip if a newer language pair has invalidated this request.
+        val currentSrc = _uiState.value.sourceLang.mlKitCode
+        val currentTgt = _uiState.value.targetLang.mlKitCode
+        if (req.sourceLang != currentSrc || req.targetLang != currentTgt) {
+            inFlight.remove(key)
+            return
+        }
+        try {
+            val translated = translationRepo.translate(
+                text = req.text,
+                sourceLang = req.sourceLang,
+                targetLang = req.targetLang,
+            )
+            // Re-check language pair after suspend resume to avoid stale writes.
+            val nowSrc = _uiState.value.sourceLang.mlKitCode
+            val nowTgt = _uiState.value.targetLang.mlKitCode
+            if (req.sourceLang == nowSrc && req.targetLang == nowTgt) {
+                translationCache[key] = translated
+                applyTranslation(req.text, req.sourceLang, req.targetLang, translated)
+            }
+        } catch (e: TranslationError.ModelMissing) {
+            _uiState.value = _uiState.value.copy(missingModelLang = e.languageCode)
+        } catch (_: Exception) {
+            // Network / unknown — silently skip; user may retry on next stable frame.
+        } finally {
+            inFlight.remove(key)
+        }
+    }
+
+    private fun applyTranslation(sourceText: String, src: String, tgt: String, translated: String) {
+        viewModelScope.launch(trackerDispatcher) {
+            for (t in trackedBlocks) {
+                if (t.sourceText == sourceText) t.translatedText = translated
+            }
+            // Re-publish so the renderer picks up the translation immediately.
+            val snapshot = trackedBlocks.map { t ->
+                ArLensBlock(
+                    id = t.id,
+                    originalText = t.sourceText,
+                    translatedText = t.translatedText,
+                    smoothedBox = RectF(t.left, t.top, t.right, t.bottom),
+                    displayAlpha = t.displayAlpha,
                 )
-                translationCache[originalText] = translated
-            } catch (e: Exception) {
-                // Allow a retry on the next stable frame
-                translationPending.remove(originalText)
-            } finally {
-                // Always clear the pending flag so the entry doesn't leak in the map
-                // even after a successful translation (cache now serves the result).
-                translationPending.remove(originalText)
+            }
+            _uiState.value = _uiState.value.copy(blocks = snapshot)
+            // Upsert to history (off-thread)
+            launch(Dispatchers.IO) {
+                runCatching { historyDao.upsert(sourceText, translated, src, tgt) }
             }
         }
     }
 
-    private fun buildBlockId(text: String, cx: Float, cy: Float): String {
-        val gridX = (cx / 100).toInt()
-        val gridY = (cy / 100).toInt()
-        return "${text.trim().hashCode()}_${gridX}_${gridY}"
-    }
+    private fun cacheKey(src: String, tgt: String, text: String): String =
+        "$src|$tgt|$text"
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-    /**
-     * Called when ArLensScreen leaves composition.
-     * Unbinds camera so no frames are analyzed while another mode is active.
-     * Tracked blocks and translation caches are retained so the overlay
-     * restores instantly if the user returns to the same session.
-     */
-    fun pause() {
-        cameraController.pauseCamera()
-    }
-
     override fun onCleared() {
+        translationRequests.close()
+        cancelAllTranslations()
         analyzer.close()
         cameraController.stopCamera()
         translationRepo.close()
+        speechController.shutdown()
         super.onCleared()
     }
 
-    // ── Internal tracking state ────────────────────────────────────────────────
-
-    private class TrackedBlock(
-        val id: String,
-        val originalText: String,
-        var smoothedLeft:   Float,
-        var smoothedTop:    Float,
-        var smoothedRight:  Float,
-        var smoothedBottom: Float,
-        var displayAlpha:   Float = 0f,
-        var missedFrames:   Int   = 0,
-        var stableFrameCount: Int = 0,
-        var translatedText: String = "",
-        val recentDisplacements: ArrayDeque<Float> = ArrayDeque(),
-        var cornerPoints: Array<Point>? = null,
-        /** Wall-clock ms of the last frame where this block was actually matched. */
-        var lastSeenTimeMs: Long = System.currentTimeMillis()
-    )
-
     private companion object {
-        const val EMA_ALPHA              = 0.35f   // EMA for position smoothing
-        const val MAX_DISPLACEMENT_PX    = 25f     // max px jitter to be considered "stable"
-        const val SPATIAL_MATCH_PX       = 50f     // reduced from 80 — tighter spatial match radius
-        const val STABILITY_WINDOW       = 2       // frames in displacement history
-        const val STABLE_FRAMES_REQUIRED = 2       // consecutive stable frames before showing
-        const val MAX_MISSED_FRAMES      = 2       // reduced from 5 — evict after 2 missed frames (~200ms)
-        const val ALPHA_LERP_IN          = 0.35f   // fade-in speed (unchanged)
-        const val ALPHA_LERP_OUT         = 0.65f   // fade-out speed — 2× faster so blocks vanish quickly
-        /** Hard expiry: blocks not matched in this many ms are force-evicted regardless of alpha. */
-        const val STALE_THRESHOLD_MS     = 400L    // 400ms max lifetime after last match
-        /** Minimum text similarity to allow a spatial-only match. */
-        const val TEXT_SIM_THRESHOLD     = 0.55f   // blocks must be at least 55% text-similar to match
+        const val ANALYZER_THROTTLE_MS = 66L      // ~15 fps
+        const val STABLE_FRAMES_REQUIRED = 3
+        const val MAX_MISSED_FRAMES = 6
+        const val STALE_THRESHOLD_MS = 1500L
+        const val MAX_MATCH_DIST_FRACTION = 0.12f  // fraction of min(effW,effH)
+        const val MAX_CONCURRENT_TRANSLATIONS = 3
     }
 }

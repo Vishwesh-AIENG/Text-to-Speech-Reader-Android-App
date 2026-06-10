@@ -77,6 +77,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         settingsRepository.useSdfOverlay
             .onEach { use -> _uiState.value = _uiState.value.copy(useSdfOverlay = use) }
             .launchIn(viewModelScope)
+
+        settingsRepository.termsAccepted
+            .onEach { accepted -> _uiState.value = _uiState.value.copy(termsAccepted = accepted) }
+            .launchIn(viewModelScope)
+    }
+
+    fun acceptTerms() {
+        viewModelScope.launch { settingsRepository.setTermsAccepted(true) }
     }
 
     // ── Language persistence ─────────────────────────────────────────────────────
@@ -197,6 +205,7 @@ data class SettingsUiState(
     val pitch: Float = 1.0f,
     val fontSize: Int = 16,
     val onboardingShown: Boolean = true,  // default true to avoid flash on existing installs
+    val termsAccepted: Boolean = true,    // default true to avoid flash; real value loads from DataStore
     val useSdfOverlay: Boolean = false,   // Classic (Canvas) by default; Beta = SDF/OpenGL
     val error: String? = null
 )

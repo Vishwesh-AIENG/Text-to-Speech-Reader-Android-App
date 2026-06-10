@@ -37,3 +37,15 @@
 -keep class * extends androidx.lifecycle.AndroidViewModel {
     <init>(...);
 }
+
+# AutoValue / JavaPoet (transitively pulled in by MediaPipe tasks-genai).
+# These reference javax.lang.model.* and javax.annotation.processing.* which
+# are compile-time-only and not present on Android. Safe to suppress.
+-dontwarn javax.lang.model.**
+-dontwarn javax.annotation.processing.**
+-dontwarn autovalue.shaded.**
+-dontwarn com.google.auto.value.**
+
+# AR Lens — JNI / reflection-friendly classes
+-keep class com.app.ttsreader.ocr.SpatialWord { *; }
+-keep class com.app.ttsreader.ocr.NativeOcrEngine { *; }
